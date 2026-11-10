@@ -1,0 +1,59 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Bee",
+  "version": "0.1.0",
+  "identifier": "studio.bee.vinyl",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Bee",
+        "width": 1320,
+        "height": 840,
+        "minWidth": 880,
+        "minHeight": 660,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "backgroundColor": "#00000000",
+        "transparent": true,
+        "windowEffects": {
+          "effects": [
+            "liquidGlassRegular",
+            "sidebar"
+          ]
+        }
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost",
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$APPCACHE/artwork-v2/*"
+        ]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "app"
+    ],
+    "icon": [
+      "icons/icon.icns",
+      "icons/icon.png"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "entitlements": "Entitlements.plist"
+    },
+    "resources": {
+      "icons/compiled/Assets.car": "Assets.car"
+    }
+  }
+}

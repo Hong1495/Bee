@@ -1,0 +1,22 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+*.tsbuildinfo
+.DS_Store
+
+# Local configuration and signing credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.mobileprovision
+*.log
+.idea/
+.vscode/
+# Keep the compiled system catalog for builds without Icon Composer.
+src-tauri/icons/compiled/*
+!src-tauri/icons/compiled/Assets.car

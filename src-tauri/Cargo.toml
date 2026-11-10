@@ -1,0 +1,25 @@
+[package]
+name = "bee-vinyl"
+version = "0.1.0"
+description = "A little space for your records"
+authors = ["Bee"]
+edition = "2021"
+license = "MIT"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["image-png", "protocol-asset"] }
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSImage", "NSToolbar", "NSWindow", "NSBox", "NSColor", "NSView"] }
+objc2-foundation = { version = "0.3", features = ["NSData"] }
+
+# Current macOS dyld rejects stripped proc-macro dylibs emitted by this
+# toolchain. Keep build-time symbols while retaining optimized app code.
+[profile.release.build-override]
+strip = false

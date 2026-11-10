@@ -1,0 +1,127 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod music;
+
+#[tauri::command]
+fn titlebar_double_click(window: tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let handle = window.clone();
+        window.run_on_main_thread(move || {
+            use objc2_foundation::{NSUserDefaults, NSString};
+            if let Ok(ptr) = handle.ns_window() {
+                let native = unsafe { &*(ptr as *const objc2_app_kit::NSWindow) };
+                let defaults = NSUserDefaults::standardUserDefaults();
+                let action = defaults.stringForKey(&NSString::from_str("AppleActionOnDoubleClick")).map(|s| s.to_string());
+                match action.as_deref() {
+                    Some("Minimize") => native.performMiniaturize(None),
+                    Some("None") => {},
+                    _ => native.performZoom(None),
+                }
+            }
+        }).map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+// This backing surface is resized by AppKit in the same transaction as the
+// window. A transparent WKWebView can otherwise expose glass at the trailing
+// edge while WebKit catches up with live resize.
+#[cfg(target_os = "macos")]
+fn update_content_backing(native: &objc2_app_kit::NSWindow, dark: bool, sidebar_width: f64) {
+    use objc2::{MainThreadOnly, MainThreadMarker, Message};
+    use objc2_app_kit::{NSAutoresizingMaskOptions, NSBox, NSBoxType, NSColor, NSView, NSWindowOrderingMode};
+    let Some(content) = native.contentView() else { return };
+    let existing = content.subviews().iter().find_map(|view| view.downcast_ref::<NSBox>().map(|view| view.retain()));
+    let backing = existing.unwrap_or_else(|| {
+        let mtm = MainThreadMarker::new().expect("window updates run on main thread");
+        let backing = NSBox::initWithFrame(NSBox::alloc(mtm), content.bounds());
+        backing.setBoxType(NSBoxType::Custom);
+        backing.setBorderWidth(0.0);
+        backing.setCornerRadius(0.0);
+        backing.setTransparent(false);
+        backing.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
+        // The WebView is the topmost child; keep the backing above glass and
+        // below WebKit so navigation and all interactive content stay intact.
+        let top = content.subviews().lastObject();
+        content.addSubview_positioned_relativeTo(&backing, NSWindowOrderingMode::Below, top.as_deref().map(|v| v as &NSView));
+        backing
+    });
+    let mut frame = content.bounds();
+    let sidebar_width = if sidebar_width.is_finite() { sidebar_width.clamp(0.0, 320.0) } else { 220.0 };
+    frame.origin.x += sidebar_width;
+    frame.size.width = (frame.size.width - sidebar_width).max(0.0);
+    backing.setFrame(frame);
+    let (r, g, b) = if dark { (41.0, 42.0, 46.0) } else { (247.0, 247.0, 249.0) };
+    backing.setFillColor(&NSColor::colorWithSRGBRed_green_blue_alpha(r / 255.0, g / 255.0, b / 255.0, 1.0));
+}
+
+#[tauri::command]
+fn set_content_backing(window: tauri::WebviewWindow, dark: bool, sidebar_width: f64) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let handle = window.clone();
+        window.run_on_main_thread(move || {
+            if let Ok(ptr) = handle.ns_window() {
+                update_content_backing(unsafe { &*(ptr as *const objc2_app_kit::NSWindow) }, dark, sidebar_width);
+            }
+        }).map_err(|err| err.to_string())?;
+    }
+    Ok(())
+}
+
+fn main() {
+    tauri::Builder::default()
+        .manage(music::MusicBridge::default())
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::Manager;
+                use objc2::{MainThreadMarker, MainThreadOnly};
+                use objc2_app_kit::{NSToolbar, NSWindow, NSWindowToolbarStyle};
+                use objc2_foundation::NSString;
+                if let Some(window) = app.get_webview_window("main") {
+                    let ptr = window.ns_window()?;
+                    // AppKit owns titlebar geometry throughout live resize and
+                    // fullscreen transitions. Never reposition its buttons from JS.
+                    let native = unsafe { &*(ptr as *const NSWindow) };
+                    let mtm = MainThreadMarker::new().expect("setup runs on main thread");
+                    let toolbar = NSToolbar::initWithIdentifier(NSToolbar::alloc(mtm), &NSString::from_str("BeeWindowToolbar"));
+                    native.setToolbarStyle(NSWindowToolbarStyle::Unified);
+                    native.setToolbar(Some(&toolbar));
+                    native.setTitlebarAppearsTransparent(true);
+                    // Let AppKit restore the user's window geometry and choose
+                    // the animation appropriate to the current system settings.
+                    native.setFrameAutosaveName(&NSString::from_str("BeeMainWindow"));
+                    native.setAnimationBehavior(objc2_app_kit::NSWindowAnimationBehavior::Default);
+                    update_content_backing(native, false, 220.0);
+                }
+            }
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![set_content_backing, titlebar_double_click, music::music_request])
+        .on_window_event(|window, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Closing the sole window does not quit a macOS music app.
+                // Keep the webview/connection alive for a subsequent Dock reopen.
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("Unable to start Bee")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                use tauri::Manager;
+                if let Some(window) = app.get_webview_window("main") {
+                    if let Ok(ptr) = window.ns_window() {
+                        let native = unsafe { &*(ptr as *const objc2_app_kit::NSWindow) };
+                        if native.isMiniaturized() { native.deminiaturize(None); }
+                        native.makeKeyAndOrderFront(None);
+                    }
+                }
+            }
+        });
+}
