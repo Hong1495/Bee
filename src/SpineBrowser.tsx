@@ -1,14 +1,15 @@
 import { playUISound } from './uiSounds';
 import { Artwork } from './Artwork';
-import { memo, useLayoutEffect, useRef, type CSSProperties } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef, type CSSProperties } from 'react';
 import type { Album } from './data';
+import { lowerBound, nearestShelfSlot } from './shelfPositions';
 
 export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initialScroll, initialAlbumId, onScrollPosition }: { albums: Album[]; onOpen: (album: Album) => void; initialScroll?: number; initialAlbumId?: string; onScrollPosition?: (position: number) => void }) {
   const viewport = useRef<HTMLDivElement>(null);
   const travel = useRef<(position: number) => void>(() => {});
   const suppressClick = useRef(false);
   const hoverMutedUntil = useRef(0);
-  const albumKey = albums.map(album => album.id).join('|');
+  const albumKey = useMemo(()=>albums.map(album => album.id).join('|'),[albums]);
 
   const saveScroll = useRef(onScrollPosition);
   saveScroll.current = onScrollPosition;
@@ -32,7 +33,8 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
     const lastTilts: string[] = [];
     const lastOrders: string[] = [];
     const paint = () => {
-      const eye = root.scrollLeft + width / 2;
+      const scrollLeft = root.scrollLeft;
+      const eye = scrollLeft + width / 2;
       const spacing = centers.length > 1 ? centers[1] - centers[0] : 112;
       focusPosition = (eye - (centers[0] ?? 0)) / spacing;
       const slot = Math.max(0, Math.min(items.length - 1, Math.round(focusPosition)));
@@ -43,8 +45,8 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
       // Only update the sleeves near the viewport; offscreen transforms need
       // no per-frame writes even in a library with thousands of albums.
       const spacingForRange = centers.length > 1 ? centers[1] - centers[0] : 112;
-      const first = Math.max(0, Math.floor((root.scrollLeft - (centers[0] ?? 0) - 400) / spacingForRange));
-      const last = Math.min(items.length - 1, Math.ceil((root.scrollLeft + width - (centers[0] ?? 0) + 400) / spacingForRange));
+      const first = Math.max(0, Math.floor((scrollLeft - (centers[0] ?? 0) - 400) / spacingForRange));
+      const last = Math.min(items.length - 1, Math.ceil((scrollLeft + width - (centers[0] ?? 0) + 400) / spacingForRange));
       for (let index = first; index <= last; index++) {
         const item = items[index];
         // Perspective belongs to the shelf, not the window width. Resizing
@@ -73,10 +75,7 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
     };
     const schedule = () => { if (!frame) { last = 0; frame = requestAnimationFrame(tick); } };
     const move = (position: number) => { hoverMutedUntil.current = performance.now() + 180; target = clamp(position); animating = true; schedule(); };
-    const nearestSlot = (position: number) => centers.reduce((best, center) => {
-      const slot = clamp(center - width / 2);
-      return Math.abs(slot - position) < Math.abs(best - position) ? slot : best;
-    }, clamp((centers[0] ?? 0) - width / 2));
+    const nearestSlot = (position: number) => nearestShelfSlot(centers,width,max,position);
     const settle = () => move(nearestSlot(root.scrollLeft));
     travel.current = position => { soundUntil = performance.now() + 1600; move(position); };
     const measure = () => {
@@ -84,7 +83,11 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
       const anchor = focusPosition;
       width = root.clientWidth;
       max = Math.max(0, root.scrollWidth - width);
-      centers = items.map(item => item.offsetLeft + item.offsetWidth / 2);
+      // Sleeves use one fixed flex-basis. Read layout for two slots, then derive
+      // the rest instead of asking WebKit for every album on every resize.
+      const firstCenter = items[0] ? items[0].offsetLeft + items[0].offsetWidth/2 : 0;
+      const stride = items[1] ? items[1].offsetLeft + items[1].offsetWidth/2 - firstCenter : 112;
+      centers = items.map((_,index)=>firstCenter+index*stride);
       if (!measured) { const anchorIndex = albums.findIndex(album => album.id === initialAlbumId); root.scrollLeft = initialScroll ?? (anchorIndex >= 0 ? clamp(centers[anchorIndex] - width/2) : nearestSlot(max / 2)); measured = true; }
       else {
         const spacing = centers.length > 1 ? centers[1] - centers[0] : 112;
@@ -112,9 +115,10 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
       if (Math.abs(wheelDelta) >= 32) {
         const direction = Math.sign(wheelDelta);
         const origin = nearestSlot(animating ? target : root.scrollLeft);
-        const next = direction > 0
-          ? centers.find(center => center - width / 2 > origin + 1)
-          : [...centers].reverse().find(center => center - width / 2 < origin - 1);
+        let nextIndex = lowerBound(centers,origin + width/2 + direction);
+        if(direction>0 && centers[nextIndex]===origin+width/2+1) nextIndex++;
+        if(direction<0) nextIndex--;
+        const next = centers[nextIndex];
         if (next !== undefined) move(next - width / 2);
         wheelDelta = 0;
       }

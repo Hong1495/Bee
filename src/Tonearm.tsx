@@ -29,13 +29,13 @@ export const Tonearm = memo(function Tonearm({ playing, trackId, position, onTog
         const angle = `${tonearmAngle((sample.seconds+elapsed)/sample.duration).toFixed(3)}deg`;
         if (angle !== previous) { ref.current?.style.setProperty('--playing-angle',angle); previous=angle; }
       }
-      frame = requestAnimationFrame(update);
+      if (playing) frame = requestAnimationFrame(update);
     };
     const visibility = () => { cancelAnimationFrame(frame); if (!document.hidden) update(); };
     visibility();
     document.addEventListener('visibilitychange',visibility);
     return () => { cancelAnimationFrame(frame); document.removeEventListener('visibilitychange',visibility); };
-  }, [position,trackId]);
+  }, [position,trackId,playing]);
   return <button ref={ref} type="button" className={`tonearm ${playing ? 'engaged' : ''}`}
     aria-label={playing ? '点击唱臂暂停' : '点击唱臂播放'} aria-pressed={playing}
     title={playing ? '抬起唱臂，暂停' : '放下唱臂，播放'} onClick={onToggle}>

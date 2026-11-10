@@ -47,3 +47,25 @@ assert.equal(singleStatus.canPrevious,false); assert.equal(singleStatus.canNext,
 const listResult = JSON.parse(context.run([JSON.stringify({operation:'play',id:ids[0],playlistId:'000000000000000A'})]));
 assert.deepEqual(listResult.context.ids,ids); assert.equal(current,ids[0]);
 console.log('PASS: previous/next source order, first/last boundaries, one-track source and materialized playlist lookup');
+// Album and single-track actions carry distinct source IDs.
+const albumResult = JSON.parse(context.run([JSON.stringify({operation:'play',id:ids[0],trackIds:ids,sourceName:'Album'})]));
+assert.deepEqual(albumResult.context.ids,ids);
+const singleResult = JSON.parse(context.run([JSON.stringify({operation:'play',id:ids[1],trackIds:[ids[1]],sourceName:'Song'})]));
+assert.deepEqual(singleResult.context.ids,[ids[1]]);
+// Whole-list playback always starts at its first track, not a filtered row.
+context.run([JSON.stringify({operation:'play',id:ids[2],playlistId:'000000000000000A'})]);
+assert.equal(current,ids[0]);
+context.run([JSON.stringify({operation:'play',playlistId:'000000000000000A'})]);
+assert.equal(current,ids[0]);
+const queueIds = Array.from({length:125},(_,i)=>(i+1).toString(16).padStart(16,'0'));
+context.Application = () => ({running:()=>true,playerState:()=> 'playing',currentTrack:{persistentID:()=>queueIds[60]},
+ libraryPlaylists:[{tracks:{persistentID:()=>queueIds,name:()=>queueIds.map((_,i)=>`Song ${i}`),artist:()=>queueIds.map(()=> 'Artist'),duration:()=>queueIds.map(()=>123)}}]});
+const fullQueue = JSON.parse(context.run([JSON.stringify({operation:'queue',context:{ids:queueIds,name:'Full album',playlistId:null}})]));
+assert.equal(fullQueue.tracks.length,125);
+assert.equal(fullQueue.tracks[0].id,queueIds[0]);
+assert.equal(fullQueue.tracks[124].id,queueIds[124]);
+assert.equal(fullQueue.tracks.filter(t=>t.current).length,1);
+assert.equal(fullQueue.tracks[60].current,true);
+const onlySong = JSON.parse(context.run([JSON.stringify({operation:'queue',context:{ids:[queueIds[60]],name:'Single',playlistId:null}})]));
+assert.equal(onlySong.tracks.length,1);
+console.log('PASS: album vs single intent, playlist first-track semantics, complete 125-track queue and current-row position');

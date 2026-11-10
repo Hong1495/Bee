@@ -34,7 +34,8 @@
       "assetProtocol": {
         "enable": true,
         "scope": [
-          "$APPCACHE/artwork-v2/*"
+          "$APPCACHE/artwork-v2/*",
+          "$APPCACHE/local-artwork/*"
         ]
       }
     }

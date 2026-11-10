@@ -1,25 +1,49 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod local;
+mod lyrics;
 mod music;
+mod storage;
+
+#[derive(Debug, PartialEq)]
+enum ReopenAction {
+    RestoreFromDock,
+    ShowClosedWindow,
+    None,
+}
+
+fn reopen_action(miniaturized: bool, visible: bool) -> ReopenAction {
+    if miniaturized {
+        ReopenAction::RestoreFromDock
+    } else if !visible {
+        ReopenAction::ShowClosedWindow
+    } else {
+        ReopenAction::None
+    }
+}
 
 #[tauri::command]
 fn titlebar_double_click(window: tauri::WebviewWindow) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let handle = window.clone();
-        window.run_on_main_thread(move || {
-            use objc2_foundation::{NSUserDefaults, NSString};
-            if let Ok(ptr) = handle.ns_window() {
-                let native = unsafe { &*(ptr as *const objc2_app_kit::NSWindow) };
-                let defaults = NSUserDefaults::standardUserDefaults();
-                let action = defaults.stringForKey(&NSString::from_str("AppleActionOnDoubleClick")).map(|s| s.to_string());
-                match action.as_deref() {
-                    Some("Minimize") => native.performMiniaturize(None),
-                    Some("None") => {},
-                    _ => native.performZoom(None),
+        window
+            .run_on_main_thread(move || {
+                use objc2_foundation::{NSString, NSUserDefaults};
+                if let Ok(ptr) = handle.ns_window() {
+                    let native = unsafe { &*(ptr as *const objc2_app_kit::NSWindow) };
+                    let defaults = NSUserDefaults::standardUserDefaults();
+                    let action = defaults
+                        .stringForKey(&NSString::from_str("AppleActionOnDoubleClick"))
+                        .map(|s| s.to_string());
+                    match action.as_deref() {
+                        Some("Minimize") => native.performMiniaturize(None),
+                        Some("None") => {}
+                        _ => native.performZoom(None),
+                    }
                 }
-            }
-        }).map_err(|error| error.to_string())?;
+            })
+            .map_err(|error| error.to_string())?;
     }
     Ok(())
 }
@@ -29,10 +53,17 @@ fn titlebar_double_click(window: tauri::WebviewWindow) -> Result<(), String> {
 // edge while WebKit catches up with live resize.
 #[cfg(target_os = "macos")]
 fn update_content_backing(native: &objc2_app_kit::NSWindow, dark: bool, sidebar_width: f64) {
-    use objc2::{MainThreadOnly, MainThreadMarker, Message};
-    use objc2_app_kit::{NSAutoresizingMaskOptions, NSBox, NSBoxType, NSColor, NSView, NSWindowOrderingMode};
-    let Some(content) = native.contentView() else { return };
-    let existing = content.subviews().iter().find_map(|view| view.downcast_ref::<NSBox>().map(|view| view.retain()));
+    use objc2::{MainThreadMarker, MainThreadOnly, Message};
+    use objc2_app_kit::{
+        NSAutoresizingMaskOptions, NSBox, NSBoxType, NSColor, NSView, NSWindowOrderingMode,
+    };
+    let Some(content) = native.contentView() else {
+        return;
+    };
+    let existing = content
+        .subviews()
+        .iter()
+        .find_map(|view| view.downcast_ref::<NSBox>().map(|view| view.retain()));
     let backing = existing.unwrap_or_else(|| {
         let mtm = MainThreadMarker::new().expect("window updates run on main thread");
         let backing = NSBox::initWithFrame(NSBox::alloc(mtm), content.bounds());
@@ -40,32 +71,62 @@ fn update_content_backing(native: &objc2_app_kit::NSWindow, dark: bool, sidebar_
         backing.setBorderWidth(0.0);
         backing.setCornerRadius(0.0);
         backing.setTransparent(false);
-        backing.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
+        backing.setAutoresizingMask(
+            NSAutoresizingMaskOptions::ViewWidthSizable
+                | NSAutoresizingMaskOptions::ViewHeightSizable,
+        );
         // The WebView is the topmost child; keep the backing above glass and
         // below WebKit so navigation and all interactive content stay intact.
         let top = content.subviews().lastObject();
-        content.addSubview_positioned_relativeTo(&backing, NSWindowOrderingMode::Below, top.as_deref().map(|v| v as &NSView));
+        content.addSubview_positioned_relativeTo(
+            &backing,
+            NSWindowOrderingMode::Below,
+            top.as_deref().map(|v| v as &NSView),
+        );
         backing
     });
     let mut frame = content.bounds();
-    let sidebar_width = if sidebar_width.is_finite() { sidebar_width.clamp(0.0, 320.0) } else { 220.0 };
+    let sidebar_width = if sidebar_width.is_finite() {
+        sidebar_width.clamp(0.0, 320.0)
+    } else {
+        220.0
+    };
     frame.origin.x += sidebar_width;
     frame.size.width = (frame.size.width - sidebar_width).max(0.0);
     backing.setFrame(frame);
-    let (r, g, b) = if dark { (41.0, 42.0, 46.0) } else { (247.0, 247.0, 249.0) };
-    backing.setFillColor(&NSColor::colorWithSRGBRed_green_blue_alpha(r / 255.0, g / 255.0, b / 255.0, 1.0));
+    let (r, g, b) = if dark {
+        (41.0, 42.0, 46.0)
+    } else {
+        (247.0, 247.0, 249.0)
+    };
+    backing.setFillColor(&NSColor::colorWithSRGBRed_green_blue_alpha(
+        r / 255.0,
+        g / 255.0,
+        b / 255.0,
+        1.0,
+    ));
 }
 
 #[tauri::command]
-fn set_content_backing(window: tauri::WebviewWindow, dark: bool, sidebar_width: f64) -> Result<(), String> {
+fn set_content_backing(
+    window: tauri::WebviewWindow,
+    dark: bool,
+    sidebar_width: f64,
+) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let handle = window.clone();
-        window.run_on_main_thread(move || {
-            if let Ok(ptr) = handle.ns_window() {
-                update_content_backing(unsafe { &*(ptr as *const objc2_app_kit::NSWindow) }, dark, sidebar_width);
-            }
-        }).map_err(|err| err.to_string())?;
+        window
+            .run_on_main_thread(move || {
+                if let Ok(ptr) = handle.ns_window() {
+                    update_content_backing(
+                        unsafe { &*(ptr as *const objc2_app_kit::NSWindow) },
+                        dark,
+                        sidebar_width,
+                    );
+                }
+            })
+            .map_err(|err| err.to_string())?;
     }
     Ok(())
 }
@@ -73,20 +134,24 @@ fn set_content_backing(window: tauri::WebviewWindow, dark: bool, sidebar_width: 
 fn main() {
     tauri::Builder::default()
         .manage(music::MusicBridge::default())
+        .manage(local::LocalMedia::default())
         .setup(|app| {
             #[cfg(target_os = "macos")]
             {
-                use tauri::Manager;
                 use objc2::{MainThreadMarker, MainThreadOnly};
                 use objc2_app_kit::{NSToolbar, NSWindow, NSWindowToolbarStyle};
                 use objc2_foundation::NSString;
+                use tauri::Manager;
                 if let Some(window) = app.get_webview_window("main") {
                     let ptr = window.ns_window()?;
                     // AppKit owns titlebar geometry throughout live resize and
                     // fullscreen transitions. Never reposition its buttons from JS.
                     let native = unsafe { &*(ptr as *const NSWindow) };
                     let mtm = MainThreadMarker::new().expect("setup runs on main thread");
-                    let toolbar = NSToolbar::initWithIdentifier(NSToolbar::alloc(mtm), &NSString::from_str("BeeWindowToolbar"));
+                    let toolbar = NSToolbar::initWithIdentifier(
+                        NSToolbar::alloc(mtm),
+                        &NSString::from_str("BeeWindowToolbar"),
+                    );
                     native.setToolbarStyle(NSWindowToolbarStyle::Unified);
                     native.setToolbar(Some(&toolbar));
                     native.setTitlebarAppearsTransparent(true);
@@ -99,7 +164,15 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![set_content_backing, titlebar_double_click, music::music_request])
+        .invoke_handler(tauri::generate_handler![
+            set_content_backing,
+            titlebar_double_click,
+            music::music_request,
+            music::music_seek,
+            local::local_request,
+            storage::storage_request,
+            lyrics::lyrics_request
+        ])
         .on_window_event(|window, event| {
             #[cfg(target_os = "macos")]
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -118,10 +191,35 @@ fn main() {
                 if let Some(window) = app.get_webview_window("main") {
                     if let Ok(ptr) = window.ns_window() {
                         let native = unsafe { &*(ptr as *const objc2_app_kit::NSWindow) };
-                        if native.isMiniaturized() { native.deminiaturize(None); }
-                        native.makeKeyAndOrderFront(None);
+                        match reopen_action(native.isMiniaturized(), native.isVisible()) {
+                            ReopenAction::RestoreFromDock => {
+                                // AppKit owns deminiaturization, including Dock
+                                // animation and activation. Do not immediately
+                                // order the window front during that transition.
+                                native.deminiaturize(None);
+                            }
+                            ReopenAction::ShowClosedWindow => {
+                                // A red-button close was orderOut, not minimize.
+                                native.makeKeyAndOrderFront(None);
+                            }
+                            // A visible window (including a restore in progress)
+                            // is already managed by normal application activation.
+                            ReopenAction::None => {}
+                        }
                     }
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod window_tests {
+    use super::*;
+    #[test]
+    fn dock_restore_and_closed_window_reopen_are_exclusive() {
+        assert_eq!(reopen_action(true, false), ReopenAction::RestoreFromDock);
+        assert_eq!(reopen_action(true, true), ReopenAction::RestoreFromDock);
+        assert_eq!(reopen_action(false, false), ReopenAction::ShowClosedWindow);
+        assert_eq!(reopen_action(false, true), ReopenAction::None);
+    }
 }

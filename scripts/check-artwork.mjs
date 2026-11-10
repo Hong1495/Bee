@@ -30,3 +30,15 @@ assert.equal(calls,beforePeek);
 exports.resetArtworkSession();
 assert.equal(exports.peekArtwork('stale'),undefined);
 console.log('PASS: synchronous cache reads support first-frame remounts without IPC and clear on session reset');
+
+const paletteModule = {};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/recordPalette.ts','utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {exports:paletteModule});
+const solid = (r,g,b,n=100) => Array.from({length:n},()=>[r,g,b,255]).flat();
+assert.equal(paletteModule.paletteFromPixels([]),paletteModule.defaultPalette);
+assert.equal(paletteModule.paletteFromPixels([255,0,0,0]),paletteModule.defaultPalette);
+assert.equal(paletteModule.paletteFromPixels(solid(245,245,245)).ink,'#171715');
+assert.equal(paletteModule.paletteFromPixels(solid(10,20,35)).ink,'#fffdf5');
+const coloured = paletteModule.paletteFromPixels([...solid(255,255,255,70),...solid(40,90,160,30)]);
+assert.equal(coloured.paper,paletteModule.paletteFromPixels(solid(40,90,160)).paper);
+assert.equal(paletteModule.readRecordPalette('missing'),paletteModule.defaultPalette);
+console.log('PASS: label palette ignores transparency, handles blank images, preserves cover hue through white margins and chooses light/dark ink');

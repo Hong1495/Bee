@@ -30,7 +30,7 @@ function run(argv) {
     }
     const matches = collection.whose({persistentID:id})();
     if (!matches.length) throw new Error('歌曲已不在播放来源中，请刷新资料库');
-    music.play(matches[0]);
+    music.play(matches[0], {once:true});
   }
   if (request.operation === 'library') {
     const tracks = library.tracks;
@@ -60,8 +60,10 @@ function run(argv) {
     } else {
       source = {ids:request.trackIds || [request.id],name:request.sourceName || '',playlistId:null};
     }
-    if (source.ids.indexOf(request.id) < 0) throw new Error('歌曲已不在播放来源中，请刷新资料库');
-    playInSource(request.id,source);
+    const first = request.playlistId ? source.ids[0] : request.id;
+    if (!first) throw new Error('播放列表没有可播放的歌曲');
+    if (source.ids.indexOf(first) < 0) throw new Error('歌曲已不在播放来源中，请刷新资料库');
+    playInSource(first,source);
     return JSON.stringify({context:source});
   }
   if (request.operation === 'queue') {
@@ -72,9 +74,9 @@ function run(argv) {
     const tracks = library.tracks, ids = tracks.persistentID();
     const names = tracks.name(), artists = tracks.artist(), durations = tracks.duration();
     const positions = new Map(ids.map((id,i) => [id,i]));
-    const rows = offset < 0 ? [] : source.ids.slice(offset,offset+101).map((id,i) => {
+    const rows = offset < 0 ? [] : source.ids.map((id,i) => {
       const position = positions.get(id);
-      return position === undefined ? null : {id,title:names[position],artist:artists[position],duration:durations[position],current:i===0};
+      return position === undefined ? null : {id,title:names[position],artist:artists[position],duration:durations[position],current:i===offset};
     }).filter(Boolean);
     return JSON.stringify({name:source.name,shuffle:false,tracks:rows});
   }
@@ -87,6 +89,7 @@ function run(argv) {
     playInSource(source.ids[target],source);
     return JSON.stringify({context:source});
   }
+  if (request.operation === 'pause') { music.pause(); return '{}'; }
   if (request.operation === 'toggle') { music.playpause(); return '{}'; }
   if (request.operation === 'status') {
     const state = String(music.playerState());

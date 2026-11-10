@@ -1,0 +1,170 @@
+use crate::storage::{self, Provider};
+use reqwest::{blocking::Client, Url};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
+use std::{io::Read, time::Duration};
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Song { title:String, artist:String, album:String, duration:f64 }
+
+fn normalized(value:&str)->String { value.to_lowercase().chars().filter(|c|c.is_alphanumeric()).collect() }
+// Explicit artist identities, never fuzzy transliteration: a similar-looking
+// name must not make a cover artist eligible for the original recording.
+fn artist_key(value:&str)->String {
+ let key=normalized(value);
+ match key.as_str(){
+  "筷子兄弟"|"chopstickbrothers"|"chopsticksbrothers"=>"chopstickbrothers".into(),
+  "周杰伦"|"周杰倫"|"jaychou"=>"jaychou".into(),
+  "陈奕迅"|"陳奕迅"|"easonchan"=>"easonchan".into(),
+  "林俊杰"|"林俊傑"|"jjlin"=>"jjlin".into(),
+  "孙燕姿"|"孫燕姿"|"stefaniesun"=>"stefaniesun".into(),
+  _=>key,
+ }
+}
+// Only remove release/mastering annotations. Live, remix and cover identity
+// must survive normalization, even when a provider puts it in parentheses.
+fn title_key(value:&str)->String {
+ let mut text=value.to_lowercase();
+ for (open,close) in [('(',')'),('[',']'),('（','）')] {
+  let mut from=0;
+  while let Some(start)=text[from..].find(open).map(|i|i+from){
+   let Some(end)=text[start..].find(close).map(|i|i+start) else {break};
+   let inside=&text[start..end+close.len_utf8()];
+   if ["remaster","重制","重製","digitally remastered"].iter().any(|word|inside.contains(word)) {text.replace_range(start..end+close.len_utf8(),"");from=start;}else{from=end+close.len_utf8();}
+  }
+ }
+ if let Some(start)=text.rfind(" - "){if text[start..].contains("remaster"){text.truncate(start);}}
+ normalized(&text)
+}
+fn score(song:&Song,title:&str,artists:&[String],album:&str,duration:f64)->Option<f64>{
+ if title_key(&song.title)!=title_key(title)||song.title.trim().is_empty(){return None;}
+ let wanted=artist_key(&song.artist);
+ if wanted.is_empty()||!artists.iter().any(|a|artist_key(a)==wanted){return None;}
+ // Do not apply a timed transcript to a materially different recording.
+ if song.duration<=0.0||!duration.is_finite()||duration<=0.0{return None;}
+ let delta=(duration-song.duration).abs();if delta>5.0{return None;}
+ Some(100.0-delta*4.0+if normalized(&song.album)==normalized(album){10.0}else{0.0})
+}
+fn timed(text:&str)->bool {
+ text.lines().filter(|line|line.starts_with('[')&&line.split(']').next().is_some_and(|tag|tag.contains(':')&&tag.chars().nth(1).is_some_and(|c|c.is_ascii_digit()))).take(2).count()>=2
+}
+fn result(synced:&str,plain:&str,source:&str,instrumental:bool)->Option<Value>{
+ let synced=if timed(synced){synced}else{""};
+ if synced.is_empty()&&plain.trim().is_empty()&&!instrumental{return None;}
+ Some(json!({"synced":synced,"plain":plain,"source":source,"instrumental":instrumental}))
+}
+fn endpoint(base:&str,path:&str)->Result<Url,String>{
+ let mut u=Url::parse(base.trim_end_matches('/')).map_err(|e|e.to_string())?;
+ if u.scheme()!="https"{return Err("歌词源须使用 HTTPS".into());}
+ u.set_path(&format!("{}{}",u.path().trim_end_matches('/'),path));Ok(u)
+}
+fn get(client:&Client,url:Url)->Result<Option<Value>,String>{
+ let response=client.get(url).send().map_err(|_|"歌词源连接失败")?;
+ if response.status()==reqwest::StatusCode::NOT_FOUND{return Ok(None);}
+ if !response.status().is_success(){return Err(format!("歌词源返回 {}",response.status()));}
+ let mut bytes=vec![];response.take(1024*1024+1).read_to_end(&mut bytes).map_err(|e|e.to_string())?;
+ if bytes.len()>1024*1024{return Err("歌词响应过大".into());}
+ serde_json::from_slice(&bytes).map(Some).map_err(|_|"歌词源返回格式无效".into())
+}
+fn lrclib(client:&Client,p:&Provider,song:&Song)->Result<Option<Value>,String>{
+ let mut u=endpoint(&p.url,"/api/get")?;
+ u.query_pairs_mut().append_pair("track_name",&song.title).append_pair("artist_name",&song.artist).append_pair("album_name",&song.album).append_pair("duration",&song.duration.round().to_string());
+ let exact=get(client,u);let mut fallback=None;
+ if let Ok(Some(data))=&exact {
+  if data["duration"].as_f64().is_some_and(|d|score(song,data["trackName"].as_str().unwrap_or(""),&[data["artistName"].as_str().unwrap_or("").into()],data["albumName"].as_str().unwrap_or(""),d).is_some()){
+   fallback=result(data["syncedLyrics"].as_str().unwrap_or(""),data["plainLyrics"].as_str().unwrap_or(""),"lrclib",data["instrumental"].as_bool().unwrap_or(false));
+   if fallback.as_ref().is_some_and(|r|!r["synced"].as_str().unwrap_or("").is_empty()){return Ok(fallback);}
+  }
+ }
+ let mut successes=usize::from(exact.is_ok());
+ // First search is precise. A title-only query recovers records indexed under
+ // the artist's English/localized name; candidates still pass identity checks.
+ for broad in [false,true]{
+  let mut u=endpoint(&p.url,"/api/search")?;
+  if broad {u.query_pairs_mut().append_pair("q",&song.title);}else{u.query_pairs_mut().append_pair("track_name",&song.title).append_pair("artist_name",&song.artist);}
+  let search=get(client,u);if search.is_ok(){successes+=1;}
+  if let Ok(Some(data))=&search{
+   let mut candidates:Vec<_>=data.as_array().into_iter().flatten().filter_map(|v|score(song,v["trackName"].as_str().unwrap_or(""),&[v["artistName"].as_str().unwrap_or("").into()],v["albumName"].as_str().unwrap_or(""),v["duration"].as_f64().unwrap_or(0.0)).map(|s|(s,v))).collect();
+   candidates.sort_by(|a,b|b.0.total_cmp(&a.0));
+   for (_,v) in candidates {if let Some(r)=result(v["syncedLyrics"].as_str().unwrap_or(""),v["plainLyrics"].as_str().unwrap_or(""),"lrclib",v["instrumental"].as_bool().unwrap_or(false)){if !r["synced"].as_str().unwrap_or("").is_empty(){return Ok(Some(r));}if fallback.is_none(){fallback=Some(r);}}}
+  }
+ }
+ if fallback.is_some()||successes>0{Ok(fallback)}else{Err("LRCLIB 暂时不可用".into())}
+}
+fn netease(client:&Client,p:&Provider,song:&Song)->Result<Option<Value>,String>{
+ let mut u=endpoint(&p.url,"/api/search/get")?;
+ u.query_pairs_mut().append_pair("s",&format!("{} {}",song.title,song.artist)).append_pair("type","1").append_pair("limit","30");
+ let Some(data)=get(client,u)? else{return Ok(None)};
+ if data["code"].as_i64()!=Some(200){return Err("网易云歌词搜索暂不可用".into());}
+ let mut candidates:Vec<_>=data["result"]["songs"].as_array().into_iter().flatten().filter_map(|v|{
+  let artists:Vec<_>=v["artists"].as_array().into_iter().flatten().filter_map(|a|a["name"].as_str().map(str::to_owned)).collect();
+  score(song,v["name"].as_str().unwrap_or(""),&artists,v["album"]["name"].as_str().unwrap_or(""),v["duration"].as_f64().unwrap_or(0.0)/1000.0).and_then(|s|v["id"].as_u64().map(|id|(s,id)))
+ }).collect();candidates.sort_by(|a,b|b.0.total_cmp(&a.0));
+ for (_,id) in candidates.into_iter().take(2){
+  let mut u=endpoint(&p.url,"/api/song/lyric")?;u.query_pairs_mut().append_pair("id",&id.to_string()).append_pair("lv","-1").append_pair("kv","-1").append_pair("tv","-1");
+  if let Some(data)=get(client,u)? {if data["code"].as_i64()!=Some(200){return Err("网易云歌词暂不可用".into());}
+   // nolyric/uncollected are not reliable proof that a track is instrumental.
+   if let Some(r)=result(data["lrc"]["lyric"].as_str().unwrap_or(""),"","netease",false){return Ok(Some(r));}
+  }
+ }
+ Ok(None)
+}
+fn fetch(client:&Client,p:&Provider,song:&Song)->Result<Option<Value>,String>{
+ match p.kind.as_str(){
+ "lrclib"=>lrclib(client,p,song),"netease"=>netease(client,p,song),
+ "lyricsovh"=>{let mut u=endpoint(&p.url,"")?;u.path_segments_mut().map_err(|_|"歌词源网址无效")?.pop_if_empty().push("v1").push(&song.artist).push(&song.title);
+  Ok(get(client,u)?.and_then(|v|result("",v["lyrics"].as_str().unwrap_or(""),"lyricsovh",false)))},
+ _=>Err("未知歌词源".into())}
+}
+#[tauri::command]
+pub async fn lyrics_request(app:tauri::AppHandle,song:Song,refresh:Option<bool>)->Result<Value,String>{
+ tauri::async_runtime::spawn_blocking(move||{
+  if song.title.len()>4096||song.artist.len()>4096||song.album.len()>4096||!song.duration.is_finite(){return Err("歌曲信息无效".into());}
+  let prefs=storage::preferences(&app);if !prefs.lyrics_enabled{return Ok(json!({"disabled":true}));}
+  let key=format!("{:x}",Sha256::digest(serde_json::to_vec(&(4,&song,&prefs.providers)).unwrap()));
+  let path=storage::cache(&app)?.join("lyrics-v1").join(format!("{key}.json"));
+  {let _gate=storage::CACHE_LOCK.lock().map_err(|_|"缓存不可用")?;
+   if !refresh.unwrap_or(false){if let Ok(bytes)=std::fs::read(&path){if let Ok(value)=serde_json::from_slice::<Value>(&bytes){let ttl=if value["synced"].as_str().is_some_and(|s|!s.is_empty()){30*86400}else{3600};if std::fs::metadata(&path).ok().and_then(|m|m.modified().ok()).and_then(|t|t.elapsed().ok()).is_some_and(|age|age.as_secs()<ttl){return Ok(value);}}}}
+  }
+  let client=Client::builder().timeout(Duration::from_secs(6)).connect_timeout(Duration::from_secs(3)).user_agent("Bee/0.1 (https://github.com/Hong1495/Bee)").build().map_err(|e|e.to_string())?;
+  let mut fallback=None;let mut failures=0;let mut successes=0;
+  // Query at most two sources at once, timed providers before plain fallback.
+  let providers:Vec<_>=prefs.providers.iter().filter(|p|p.enabled&&p.kind!="lyricsovh").chain(prefs.providers.iter().filter(|p|p.enabled&&p.kind=="lyricsovh")).collect();
+  for batch in providers.chunks(2){
+   let responses=std::thread::scope(|scope|{let handles:Vec<_>=batch.iter().map(|p|{let client=&client;let song=&song;scope.spawn(move||fetch(client,p,song))}).collect();handles.into_iter().map(|h|h.join().unwrap_or_else(|_|Err("歌词查询失败".into()))).collect::<Vec<_>>()});
+   let mut synced=None;
+   for response in responses {match response {Ok(Some(value))=>{if !value["synced"].as_str().unwrap_or("").is_empty(){if synced.is_none(){synced=Some(value);}}else if fallback.is_none(){fallback=Some(value);}},Err(_)=>failures+=1,Ok(None)=>successes+=1}}
+   if synced.is_some(){fallback=synced;break;}
+  }
+  if let Some(value)=fallback{let _gate=storage::CACHE_LOCK.lock().map_err(|_|"缓存不可用")?;std::fs::create_dir_all(path.parent().unwrap()).map_err(|e|e.to_string())?;std::fs::write(&path,serde_json::to_vec(&value).unwrap()).map_err(|e|e.to_string())?;storage::enforce(&app,Some(&path))?;Ok(value)}
+  else if failures>0&&successes==0{Err("歌词源暂时不可用".into())}else{Ok(Value::Null)}
+ }).await.map_err(|e|e.to_string())?
+}
+#[cfg(test)]
+mod tests{
+ use super::*;
+ fn song()->Song{Song{title:"父亲".into(),artist:"筷子兄弟".into(),album:"父亲".into(),duration:300.0}}
+ #[test]fn reject_wrong_artist_version_and_duration(){let s=song();assert!(score(&s,"父亲",&["筷子兄弟".into()],"精选",302.0).is_some());assert!(score(&s,"父亲",&["翻唱者".into()],"父亲",300.0).is_none());assert!(score(&s,"父亲 (Live)",&["筷子兄弟".into()],"父亲",300.0).is_none());assert!(score(&s,"父亲",&["筷子兄弟".into()],"父亲",320.0).is_none());}
+ #[test]fn release_annotation_is_not_recording_identity(){assert_eq!(title_key("Yesterday (2015 Remaster)"),title_key("Yesterday"));assert_eq!(title_key("父亲（重制版）"),title_key("父亲"));assert_ne!(title_key("父亲（现场版）"),title_key("父亲"));assert_ne!(title_key("Yesterday (Live)"),title_key("Yesterday"));assert_eq!(title_key("Don't Stop!"),title_key("Don’t Stop"));}
+ #[test]
+ #[ignore = "Requires provider network access"]
+ fn live_cross_source_queries(){
+  let client=Client::builder().timeout(Duration::from_secs(6)).user_agent("Bee/0.1").build().unwrap();
+  let prefs=storage::Preferences::default();
+  for song in [Song{title:"父亲写的散文诗".into(),artist:"许飞".into(),album:"".into(),duration:228.449},Song{title:"Yesterday".into(),artist:"The Beatles".into(),album:"".into(),duration:123.576}]{
+   let r=fetch(&client,prefs.providers.iter().find(|p|p.kind=="netease").unwrap(),&song).unwrap().expect("matched recording");assert!(timed(r["synced"].as_str().unwrap()));
+  }
+ }
+ #[test]fn bilingual_artist_identity(){let s=song();assert!(score(&s,"父亲",&["Chopstick Brothers".into()],"父亲",301.186).is_some());assert!(score(&s,"父亲",&["Chopstick Brother Cover".into()],"父亲",301.186).is_none());assert!(score(&s,"父亲",&["李健".into()],"父亲",301.186).is_none());}
+ #[test]
+ #[ignore = "Requires provider network access"]
+ fn father_chinese_metadata_finds_english_artist(){
+  let client=Client::builder().timeout(Duration::from_secs(8)).user_agent("Bee/0.1").build().unwrap();
+  let p=Provider{kind:"lrclib".into(),enabled:true,url:"https://lrclib.net".into()};
+  let s=Song{title:"父亲".into(),artist:"筷子兄弟".into(),album:"父亲".into(),duration:300.9578};
+  let value=lrclib(&client,&p,&s).unwrap().expect("original recording");
+  assert!(timed(value["synced"].as_str().unwrap()));assert_eq!(value["source"],"lrclib");
+ }
+ #[test]fn require_real_timestamps(){assert!(!timed("[ar:Singer]\nplain words"));assert!(timed("[00:01.00]One\n[00:04.25]Two"));assert!(result("plain words","","netease",false).is_none());}
+}

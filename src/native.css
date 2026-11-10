@@ -284,29 +284,30 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,.native-redesign::-webkit-scroll
 .disconnect-music { display:block; margin:14px auto 0; }
 .native-redesign button:disabled { opacity:.5; }
 
-/* Separate face and folded spine, matching the shelf's sleeve construction. */
+/* The sleeve is one continuous face. Depth comes from a short contact
+   shadow, never from a duplicated cover strip or a contrasting side panel. */
 .minimal-deck .stage-sleeve {
-  overflow:visible;
+  overflow:hidden;
   transform:perspective(2400px) rotateY(-3deg) rotateZ(-3deg);
-  transform-style:preserve-3d;
-  background:transparent;
-  box-shadow:4px 10px 18px #00000025;
+  transform-style:flat;
+  background:#f4f3ef;
+  border-radius:1px;
+  box-shadow:0 1px 2px #00000016,3px 9px 16px #0000001c;
 }
 .minimal-deck .stage-sleeve:hover { transform:perspective(2400px) rotateY(-3deg) rotateZ(-3deg) translateY(-3px); }
-.minimal-deck .stage-sleeve>img { border-radius:1px; position:relative; transform:translateZ(1px); }
+.minimal-deck .stage-sleeve>img { border-radius:inherit; position:relative; transform:none; }
 .minimal-deck .stage-sleeve::after {
-  content:""; position:absolute; inset:0; pointer-events:none; transform:translateZ(2px);
-  background:linear-gradient(90deg,#00000028,transparent 2.5%,transparent 96%,#ffffff06);
-  box-shadow:none;
+  content:""; position:absolute; inset:0; pointer-events:none;
+  border-radius:inherit; background:none;
+  box-shadow:inset 0 0 0 .5px #0000000d;
 }
-.stage-sleeve-spine {
-  position:absolute; left:-3px; top:0; bottom:0; width:4px;
-  transform:none; transform-origin:right top;
-  background:linear-gradient(90deg,#0006,#0001),var(--sleeve-board,#7b7b78);
-  border-radius:1px 0 0 1px; box-shadow:inset -1px 0 #0003;
-  overflow:hidden; pointer-events:none;
+[data-theme=dark] .minimal-deck .stage-sleeve {
+  box-shadow:0 1px 2px #00000024,3px 9px 16px #00000030;
 }
-.stage-sleeve-spine img { height:100%; width:100%; object-fit:cover; opacity:.65; filter:brightness(.7); }
+[data-theme=dark] .minimal-deck .stage-sleeve::after {
+  box-shadow:inset 0 0 0 .5px #ffffff14;
+}
+
 .minimal-player { position:relative; padding-bottom:118px; }
 .floating-transport {
   position:absolute; bottom:30px; left:50%; transform:translateX(-50%);
@@ -357,10 +358,28 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,.native-redesign::-webkit-scroll
   background:color-mix(in srgb,var(--text) 3%,transparent);
 }
 /* A 12-inch record is just smaller than its sleeve, partly drawn out. */
-.native-redesign .album-art { padding-right:16%; }
+.native-redesign .album-art {
+  /* content-visibility contains painting at the card boundary. Reserve the
+     entire disc excursion (19% + 3% of its 96% diameter), including shadows. */
+  padding:4px 22% 12px 4px;
+}
 .native-redesign .peek-record { width:96%; top:2%; right:-19%; filter:none; }
 .native-redesign .album-card:hover .peek-record { transform:translateX(3%) rotate(8deg); }
 .native-redesign .album-card:hover .album-cover { transform:translateX(-1%); }
+.native-redesign .peek-record .vinyl {
+  border:1px solid #161618;
+  box-shadow:inset 0 0 0 2px #19191c;
+}
+
+.native-redesign .album-cover,
+.native-redesign .album-card:hover .album-cover {
+  box-shadow:0 3px 7px #00000016;
+}
+[data-theme=dark] .native-redesign .album-cover,
+[data-theme=dark] .native-redesign .album-card:hover .album-cover {
+  box-shadow:0 3px 7px #00000026;
+}
+.native-redesign .album-art .album-play { bottom:22px; right:calc(22% + 12px); }
 .native-redesign .album-card { content-visibility:auto; contain-intrinsic-size:auto 250px; }
 .native-redesign .playlist-song { content-visibility:auto; contain-intrinsic-size:auto 58px; }
 .empty-score { min-height:280px; height:100%; width:100%; display:grid; place-items:center; color:var(--muted); }
@@ -369,7 +388,6 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,.native-redesign::-webkit-scroll
 .empty-score.compact { min-height:100px; height:auto; }
 .empty-score.compact svg { width:min(210px,85%); }
 
-.native-redesign .topbar .view-toggle .view-label { width:auto; min-width:48px; padding:0 10px; font-size:12px; line-height:18px; white-space:nowrap; }
 
 /* Restrained notation accents; the staff remains neutral in both appearances. */
 .empty-score { --score-berry:#b56580; --score-violet:#8974ae; --score-clef:#8a8199; }
@@ -385,3 +403,135 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,.native-redesign::-webkit-scroll
 .sound-switch[aria-checked=true] { background:var(--accent); }
 .sound-switch[aria-checked=true] span { transform:translateX(12px); }
 @media(prefers-reduced-motion:reduce) { .sound-switch span { transition:none; } }
+
+/* Navigation already identifies the playlist; keep content focused on songs. */
+.native-redesign .playlist-actions { display:flex; align-items:center; margin-bottom:14px; }
+.playback-queue header { margin-bottom:6px; }
+.playback-queue .queue-limit { margin:8px 6px 0; }
+
+/* The groove pitch stays legible in small sleeves and on the full turntable.
+   A quiet uncut rim replaces the old thick, concentric inset shadows. */
+.native-redesign .vinyl {
+  border:1px solid #171719;
+  background:
+    radial-gradient(circle closest-side,transparent 0 96.5%,#171719 97% 100%),
+    repeating-radial-gradient(circle closest-side,
+      #151517 0 1px,#353538 1px 1.5px,#1c1c1f 1.5px 3px);
+  box-shadow:inset 0 0 0 1px #29292d;
+}
+
+
+/* Small cover action; no bright disc or decorative icon ring. */
+.native-redesign .album-art .album-play {
+  width:26px; height:26px; bottom:20px; right:calc(22% + 8px);
+  border:0; border-radius:6px; background:#19191dcc; color:#fff;
+  box-shadow:0 1px 4px #0002; opacity:0; transform:translateY(2px);
+  transition:opacity 120ms ease,transform 150ms ease,background 120ms ease;
+}
+.native-redesign .album-play svg { width:12px; height:12px; margin-left:1px; }
+.native-redesign .album-card:hover .album-play,
+.native-redesign .album-card:focus-within .album-play {
+  opacity:1; transform:translateY(0);
+}
+.native-redesign .album-art .album-play:hover { background:#19191df0; color:#fff; }
+.native-redesign .album-art .album-play:active { transform:scale(.94); }
+[data-theme=dark] .native-redesign .album-art .album-play { background:#39393ee6; }
+[data-theme=dark] .native-redesign .album-art .album-play:hover { background:#4a4a50; }
+@media(hover:none) { .native-redesign .album-art .album-play { opacity:1; transform:none; } }
+@media(prefers-reduced-motion:reduce) { .native-redesign .album-art .album-play { transition:none; } }
+/* Full source queues keep offscreen rows inexpensive without truncating songs. */
+.playback-queue li { content-visibility:auto; contain-intrinsic-size:auto 52px; }
+
+/* Keep the deck, lyrics and controls in one stable, slightly raised group. */
+.native-redesign .minimal-player { flex-direction:column; gap:0; padding:24px 30px 48px; }
+.listening-stack { width:min(80%,752px,calc((100dvh - 340px) * 1.55)); flex-shrink:0; }
+.native-redesign .minimal-player .minimal-deck { width:100%; }
+.listening-footer { width:87.5%; display:flex; flex-direction:column; align-items:center; gap:28px; margin-top:36px; }
+.synced-lyrics,.lyrics-space,.lyrics-plain { height:112px; width:min(92%,560px); flex-shrink:0; text-align:center; }
+.synced-lyrics { overflow:hidden; mask-image:linear-gradient(transparent,#000 16%,#000 84%,transparent); -webkit-mask-image:linear-gradient(transparent,#000 16%,#000 84%,transparent); }
+.lyrics-track { position:relative; transition:transform .28s cubic-bezier(.22,.7,.2,1); }
+.synced-lyrics p { min-height:28px; line-height:26px; padding:1px 0; margin:0; font-size:14px; font-weight:400; transition:opacity .28s; }
+.synced-lyrics p span { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; overflow-wrap:anywhere; }
+.synced-lyrics p.lyric-current { font-weight:500; }
+.lyrics-plain { position:relative; display:grid; place-items:center; }
+.plain-lyrics { position:absolute; bottom:36px; max-height:220px; overflow:auto; white-space:pre-line; padding:18px; width:100%; font-size:13px; line-height:1.8; background:var(--surface); border-radius:8px; box-shadow:var(--shadow); z-index:6; }
+.listening-footer>.floating-transport { position:relative; bottom:auto; left:auto; transform:none; flex-shrink:0; }
+@media(max-height:740px) { .listening-footer { margin-top:28px; gap:22px; } }
+.floating-transport .playback-queue .queue-track { display:flex; width:100%; height:auto; text-align:left; padding:5px; gap:12px; }
+.queue-track>span:first-child { flex:1; min-width:0; }
+.queue-track>span:last-child { color:var(--muted); font-size:11px; }
+.playback-queue li { padding:2px; }
+.preferences-page select,.preferences-page input[type=url] { color:var(--text); background:var(--surface); border:1px solid var(--line); border-radius:5px; padding:5px 8px; font:inherit; font-size:12px; }
+.preferences-page button:not(.sound-switch):not(.dark-button) { font-size:12px; }
+.preferences-page .preference-row>button,.setting-actions button,.provider-row button { color:var(--text); background:var(--soft); padding:5px 9px; border-radius:5px; white-space:nowrap; }
+.preferences-page button:disabled { opacity:.35; cursor:default; }
+.setting-actions { display:flex; align-items:center; gap:8px; }
+.setting-detail { display:block; margin-top:4px; color:var(--muted); font-size:11px; font-weight:400; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.folder-row>span { min-width:0; flex:1; margin-right:14px; }
+.provider-row { display:flex; gap:8px; padding:10px 14px; align-items:center; border-top:1px solid var(--line); }
+.provider-row input[type=url] { flex:1; min-width:90px; }
+.provider-row select { width:105px; }
+.provider-row input[type=checkbox],.preference-row input[type=checkbox] { accent-color:var(--accent); }
+.storage-meter { padding:12px 16px; border-top:1px solid var(--line); font-size:12px; }
+.storage-meter>div { display:flex; justify-content:space-between; }
+.storage-meter progress { display:block; width:100%; height:5px; margin:12px 0; border:0; border-radius:3px; overflow:hidden; }
+.storage-meter progress::-webkit-progress-bar { background:var(--soft); }
+.storage-meter progress::-webkit-progress-value { background:var(--accent); }
+.storage-meter small { color:var(--muted); font-size:11px; }
+.settings-save { display:flex; justify-content:flex-end; gap:16px; align-items:center; font-size:12px; }
+.settings-save>span,.settings-error { color:var(--accent); font-size:12px; }
+.scan-warnings { color:var(--muted); font-size:11px; margin-top:10px; }
+@media(prefers-reduced-motion:reduce) { .lyrics-track,.synced-lyrics p { transition:none; } }
+
+/* A paper label and 7 mm centre hole on a 12-inch record. Keep the
+   spindle's position and lighting stable as the record face rotates. */
+.native-redesign .vinyl { animation:none; will-change:auto; }
+.vinyl-face { position:absolute; inset:0; border-radius:50%; animation:spin 18s linear infinite paused; }
+.spinning>.vinyl-face { animation-play-state:running; will-change:transform; }
+.native-redesign .vinyl .record-label {
+  inset:33.5%; border:0; border-radius:50%;
+  background:var(--label-paper,#d5d2c9); color:var(--label-ink,#292923);
+  overflow:hidden;
+  box-shadow:inset 0 0 0 .5px #0002;
+}
+.record-hole { position:absolute; left:50%; top:50%; width:2.4%; aspect-ratio:1; transform:translate(-50%,-50%); border-radius:50%; background:#080809; box-shadow:0 0 0 .5px #0008,inset 0 1px 1px #000; }
+.record-spindle { position:absolute; left:50%; top:50%; width:2.25%; aspect-ratio:1; transform:translate(-50%,-50%); border-radius:50%; background:radial-gradient(circle at 34% 25%,#fff 0%,#e5e7e8 24%,#b4b8bc 52%,#72777d 78%,#555b62 100%); box-shadow:1px 2px 2px #0007,inset 0 0 0 .5px #f8fafb99; }
+@media(prefers-reduced-motion:reduce) { .vinyl-face { animation:none; } }
+
+/* A narrow platter edge supports the record without a heavy outer ring. */
+.minimal-deck .stage-disc::before { content:""; position:absolute; inset:0; border-radius:50%; transform:translateY(2px); background:#303136; box-shadow:0 1px 1px #0004; }
+
+/* Soft room reflections remain in world space; irregular groove sheen rotates
+   underneath, so motion is legible without spinning the light source. */
+.native-redesign .vinyl-glint,
+.native-redesign .vinyl-grain {
+  position:absolute; inset:0; border-radius:50%; pointer-events:none;
+  mask-image:radial-gradient(circle closest-side,transparent 0 34%,#000 36% 94%,transparent 99%);
+  -webkit-mask-image:radial-gradient(circle closest-side,transparent 0 34%,#000 36% 94%,transparent 99%);
+}
+.native-redesign .vinyl-glint {
+  background:conic-gradient(from -35deg,
+    transparent 0deg,#dce7f70a 12deg,#f4f7ff30 32deg,#f4f7ff0d 51deg,transparent 76deg,
+    transparent 170deg,#e4e9f612 193deg,#fff2 209deg,#ffffff08 231deg,transparent 254deg);
+  opacity:.85;
+}
+.native-redesign .vinyl-grain {
+  background:
+    conic-gradient(from 18deg,transparent 0deg,#e7ebf810 16deg,#f8faff24 27deg,#e7ebf807 40deg,transparent 60deg,
+      transparent 139deg,#ffffff0b 154deg,transparent 176deg,transparent 268deg,#dce5fa13 279deg,transparent 300deg),
+    repeating-conic-gradient(from 11deg,transparent 0deg 9.7deg,#ffffff08 9.8deg 9.95deg,transparent 10.1deg 18deg);
+  opacity:.85;
+}
+.native-redesign .peek-record .vinyl-glint { opacity:.7; }
+.native-redesign .peek-record .vinyl-grain { opacity:.55; }
+[data-theme=dark] .native-redesign .vinyl-glint { opacity:.72; }
+[data-theme=dark] .native-redesign .peek-record .vinyl-glint { opacity:.6; }
+
+/* Paper-label typography scales with the record, never with the app font size. */
+.record-label .label-print { display:block; width:100%; height:100%; overflow:hidden; fill:currentColor; font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif; text-anchor:middle; }
+.label-print .label-title { font-weight:650; letter-spacing:-.25px; }
+.label-print .label-artist { font-weight:500; }
+.label-print .label-brand { font-size:7px; font-weight:600; letter-spacing:1.2px; opacity:.65; }
+.label-print .label-details { font-size:7px; letter-spacing:.6px; opacity:.7; }
+.label-print .label-rim { font-size:6px; letter-spacing:.45px; opacity:.75; }
+.label-print .label-pressing { fill:none; stroke:currentColor; stroke-width:.6; opacity:.1; }

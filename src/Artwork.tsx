@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState, type ImgHTMLAttributes } from 'react';
 import type { Album } from './data';
-import { loadArtwork, peekArtwork } from './artworkCache';
+import { loadArtwork, peekArtwork, forgetArtwork } from './artworkCache';
+import { sampleRecordPalette } from './recordPalette';
 
 // A single observer serves the entire shelf, including both faces of sleeves.
 const visibleCallbacks = new Map<Element, () => void>();
@@ -12,6 +13,8 @@ const observer = new IntersectionObserver(entries => {
   }
 }, {rootMargin:'200px'});
 export const Artwork = memo(function Artwork({album, ...props}: {album:Album} & ImgHTMLAttributes<HTMLImageElement>) {
+  const [revision,setRevision]=useState(0);
+  useEffect(()=>{const reset=()=>{setImage(null);setRevision(v=>v+1);};window.addEventListener('bee-artwork-reset',reset);return()=>window.removeEventListener('bee-artwork-reset',reset);},[]);
   const ref = useRef<HTMLImageElement>(null);
   const [image, setImage] = useState<{id:string;url:string} | null>(null);
   useEffect(() => {
@@ -24,7 +27,8 @@ export const Artwork = memo(function Artwork({album, ...props}: {album:Album} & 
     }); });
     observer.observe(node);
     return () => { cancelled = true; observer.unobserve(node); visibleCallbacks.delete(node); };
-  }, [album]);
+  }, [album,revision]);
   const cached = peekArtwork(album.id);
-  return <img {...props} ref={ref} src={cached ?? (image?.id === album.id ? image.url : album.artwork)} decoding={cached ? 'sync' : 'async'}/>;
+  const failed = useRef('');
+  return <img {...props} crossOrigin="anonymous" onLoad={event => { sampleRecordPalette(album.id,event.currentTarget); props.onLoad?.(event); }} onError={() => { if(failed.current===album.id)return;failed.current=album.id;forgetArtwork(album.id);void loadArtwork(album).then(url=>{if(url)setImage({id:album.id,url:url+'?reload='+Date.now()});}); }} ref={ref} src={image?.id === album.id ? image.url : cached ?? album.artwork} decoding={cached ? 'sync' : 'async'}/>;
 });

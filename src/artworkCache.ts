@@ -14,9 +14,10 @@ const pump = () => {
     void queue.shift()!().finally(() => { active--; pump(); });
   }
 };
-export function resetArtworkSession() { epoch++; cache.clear(); pending.clear(); }
+export function resetArtworkSession() { epoch++; cache.clear(); pending.clear(); if (typeof window !== 'undefined') window.dispatchEvent(new Event('bee-artwork-reset')); }
 // Synchronous read for the first render after navigation. A cached cover must
 // never regress to a placeholder while waiting for IntersectionObserver.
+export function forgetArtwork(albumId:string) { cache.delete(albumId); }
 export function peekArtwork(albumId: string): string | null | undefined { return cache.get(albumId); }
 export function loadArtwork(album: Album): Promise<string | null> {
   if (cache.has(album.id)) return Promise.resolve(cache.get(album.id)!);
@@ -28,7 +29,7 @@ export function loadArtwork(album: Album): Promise<string | null> {
         if (token !== epoch) { resolve(null); return; }
         for (const song of album.tracks) {
           if (token !== epoch) { resolve(null); return; }
-          const path = await invoke<string | null>('music_request', {operation:'artwork', id:song.id, playlistId:null});
+          const path = await invoke<string | null>(song.id.startsWith('local:') ? 'local_request' : 'music_request', {operation:'artwork', id:song.id, playlistId:null});
           if (path) {
             const url = convertFileSrc(path);
             if (token === epoch) cache.set(album.id, url);
