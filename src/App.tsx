@@ -3,7 +3,7 @@ import { installUISounds, setUISoundsEnabled } from './uiSounds';
 import { EmptyScore } from './EmptyScore';
 import { Artwork } from './Artwork';
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
-import { Grid2X2, Columns3, Headphones, Users, ListMusic, PanelLeft, ArrowLeft, Disc3, Monitor, Moon, Play, Pause, SkipBack, SkipForward, Settings2, Sun, Plus, MoreHorizontal, ListPlus } from 'lucide-react';
+import { Grid2X2, Columns3, Headphones, Users, ListMusic, PanelLeft, ArrowLeft, ArrowRight, Disc3, Monitor, Moon, Play, Pause, SkipBack, SkipForward, Settings2, Sun, Plus, MoreHorizontal, ListPlus } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -24,12 +24,18 @@ import { Lyrics } from './Lyrics';
 import { trackMenu, actionMenu, type MenuAction } from './trackMenu';
 import { PlaylistDialog, type PlaylistDialogState } from './PlaylistDialog';
 import { PlaylistSongs } from './PlaylistSongs';
+import {usePlaylistCovers} from './usePlaylistCovers';
+import {PlaylistArtwork} from './PlaylistArtwork';
+import type {PlaylistCover} from './playlistCovers';
 import type { PlaylistEdit } from './useMusic';
 import { queueContentBacking } from './windowBacking';
 import { ToolbarSearch } from './ToolbarSearch';
 import { SortMenu } from './SortMenu';
 
+import {createNavigationHistory} from './navigationHistory';
+
 type Page = 'library' | 'artists' | 'playlists' | 'playing' | 'settings';
+type Location = {page:Page;albumId:string;playlist:string;artist:string;query:string;view:'grid'|'spines';sort:string;scroll:number;spine?:number};
 const read = <T,>(key: string, fallback: T): T => { try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; } };
 const IconButton = ({ label, children, onClick, active = false, className = '' }: { label: string; children: React.ReactNode; onClick?: () => void; active?: boolean; className?: string }) => <button type="button" className={`icon-button ${active ? 'active' : ''} ${className}`} aria-label={label} title={label} onClick={onClick}>{children}</button>;
 
@@ -44,7 +50,7 @@ export default function App() {
   const [selected, setSelected] = useState<Album | null>(null);
   const music = useMusic();
   const { albums, currentId, playing, track } = music;
-  useEffect(()=>{setSelected(null);setQuery('');setPlaylistDialog(null);setAddingSongs(false);},[music.source]);
+  useEffect(()=>{setSelected(null);setQuery('');setPlaylistDialog(null);setAddingSongs(false);setPlaylist('');},[music.source]);
   const album = music.currentAlbum;
   const trackIndex = album?.tracks.findIndex(item => item.id === track?.id) ?? -1;
   const [preferencesRevision,setPreferencesRevision] = useState(0);
@@ -79,16 +85,39 @@ export default function App() {
   useEffect(() => () => viewAnimation.current?.cancel(), []);
   const spineScroll = useRef<number | undefined>(undefined);
   const saveSpineScroll = useCallback((position: number) => { spineScroll.current = position; }, []);
-  const selectedRef = useRef(selected);
-  selectedRef.current = selected;
-  const openAlbum = useCallback((record: Album) => {
-    returnScroll.current = scrollRef.current?.scrollTop ?? 0;
-    transitionAlbum(() => setSelected(record), record.id, true);
-  }, [transitionAlbum]);
-  const closeAlbum = () => {
-    const record = selectedRef.current;
-    if (record) transitionAlbum(() => setSelected(null), record.id, false);
-  };
+  const location=useRef<Location>(null!);
+  location.current={page,albumId:selected?.id??'',playlist,artist,query,view,sort,scroll:0,spine:spineScroll.current};
+  const history=useRef(createNavigationHistory(location.current,(a,b)=>a.page===b.page&&a.albumId===b.albumId&&a.playlist===b.playlist&&a.artist===b.artist&&a.query===b.query));
+  const [,refreshHistory]=useState(0);
+  const pendingLocation=useRef<Location|null>(null);
+  const latestLibrary=useRef({albums,lists:music.playlists,connected:music.connected});
+  latestLibrary.current={albums,lists:music.playlists,connected:music.connected};
+  const capture=useCallback(()=>({...location.current,scroll:scrollRef.current?.scrollTop??0,spine:spineScroll.current}),[]);
+  const applyLocation=useCallback((next:Location)=>{
+    const library=latestLibrary.current;
+    const record=library.connected?library.albums.find(a=>a.id===next.albumId):undefined;
+    const target={...next,albumId:record?.id??'',playlist:next.playlist};
+    pendingLocation.current=target;spineScroll.current=target.spine;
+    setPage(target.page);setSelected(record??null);setArtist(target.artist);setPlaylist(target.playlist);setQuery(target.query);setView(target.view);setSort(target.sort);
+    setPlaylistDialog(null);setAddingSongs(false);setQueueOpen(false);
+    refreshHistory(n=>n+1);
+  },[]);
+  const visit=useCallback((patch:Partial<Location>)=>{
+    const current=capture(),next={...current,...patch,scroll:0};
+    if(!history.current.visit(current,next))return;
+    const opening=!!(next.albumId||next.playlist);
+    const id=next.albumId||next.playlist||current.albumId||current.playlist;
+    if(id)transitionAlbum(()=>applyLocation(next),id,opening);else applyLocation(next);
+  },[capture,applyLocation,transitionAlbum]);
+  const travelHistory=useCallback((offset:-1|1)=>{
+    const current=capture(),entry=history.current.move(current,offset);if(!entry)return;
+    const next={...entry,playlist:latestLibrary.current.lists.some(p=>p.id===entry.playlist)?entry.playlist:''};
+    const id=next.albumId||next.playlist||current.albumId||current.playlist;
+    if(id)transitionAlbum(()=>applyLocation(next),id,!!(next.albumId||next.playlist));else applyLocation(next);
+  },[capture,applyLocation,transitionAlbum]);
+  const openAlbum=useCallback((record:Album)=>visit({albumId:record.id}),[visit]);
+  const closeAlbum=useCallback(()=>{if(location.current.albumId||location.current.playlist)travelHistory(-1);},[travelHistory]);
+  useEffect(()=>{history.current.reset({...capture(),albumId:'',playlist:'',query:'',spine:undefined});spineScroll.current=undefined;refreshHistory(n=>n+1);},[music.source,capture]);
   const changeView = (next: 'grid' | 'spines') => {
     if (next === view) return;
     const root = scrollRef.current;
@@ -99,7 +128,7 @@ export default function App() {
     const candidates = covers.map(node => ({node,rect:node.getBoundingClientRect()})).filter(({rect}) => rect.bottom > bounds.top && rect.top < bounds.bottom && rect.right > bounds.left && rect.left < bounds.right);
     candidates.sort((a,b) => view === 'grid' ? a.rect.top-b.rect.top || a.rect.left-b.rect.left : Math.abs(a.rect.left-bounds.left-bounds.width/2)-Math.abs(b.rect.left-bounds.left-bounds.width/2));
     viewAnchor.current = candidates[0]?.node.dataset.albumArt;
-    if (view === 'grid') { gridScroll.current = root.scrollTop; spineScroll.current = undefined; }
+    if (view === 'grid') { gridScroll.current = root.scrollTop; spineScroll.current = undefined; viewAnchor.current=undefined; }
     flushSync(() => setView(next));
     if (next === 'grid') {
       root.scrollTop = gridScroll.current;
@@ -130,7 +159,7 @@ export default function App() {
   const startAlbum = music.playAlbum;
   const togglePlayback = useRef(music.toggle);
   togglePlayback.current = music.toggle;
-  const navigate = (nextPage: Page) => { setPage(nextPage); setSelected(null); setQuery(''); };
+  const navigate = useCallback((nextPage:Page)=>visit({page:nextPage,playlist:'',albumId:'',query:'',spine:undefined}),[visit]);
   const menuUpdater = useRef(updater);
   menuUpdater.current = updater;
   useEffect(() => {
@@ -152,7 +181,7 @@ export default function App() {
     return () => { disposed = true; unlisten?.(); };
   }, []);
   useEffect(() => { if (!artists.includes(artist)) setArtist(artists[0] ?? ''); }, [artists, artist]);
-  useEffect(() => { if (!music.playlists.some(item => item.id === playlist)) setPlaylist(music.playlists[0]?.id ?? ''); }, [music.playlists, playlist]);
+  useEffect(() => { if (playlist&&!music.playlists.some(item => item.id === playlist)) setPlaylist(''); }, [music.playlists, playlist]);
   useEffect(() => {
     let cancelled = false;
     if(selectedCustomList){setPlaylistLoading(false);return;}
@@ -186,8 +215,9 @@ export default function App() {
     const handler = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       if (target.closest('dialog')) return;
-      if ((event.metaKey || event.ctrlKey) && event.key === ',') { event.preventDefault(); setSelected(null); setPage('settings'); return; }
-      if ((event.metaKey || event.ctrlKey) && /^[1-4]$/.test(event.key)) { event.preventDefault(); setSelected(null); setPage((['playing','artists','library','playlists'] as Page[])[Number(event.key)-1]); return; }
+      if ((event.metaKey || event.ctrlKey) && event.key === ',') { event.preventDefault(); navigate('settings'); return; }
+      if ((event.metaKey || event.ctrlKey) && /^[1-4]$/.test(event.key)) { event.preventDefault();navigate((['playing','artists','library','playlists'] as Page[])[Number(event.key)-1]); return; }
+      if ((event.metaKey||event.altKey)&&!['INPUT','TEXTAREA','SELECT'].includes(target.tagName)&&['[',']','ArrowLeft','ArrowRight'].includes(event.key)){event.preventDefault();travelHistory(event.key==='['||event.key==='ArrowLeft'?-1:1);return;}
       if (event.code === 'Space' && !['INPUT', 'TEXTAREA', 'BUTTON', 'SELECT'].includes(target.tagName)) { event.preventDefault(); void togglePlayback.current(); }
       if (event.key === 'Escape') { closeAlbum(); }
     };
@@ -195,14 +225,22 @@ export default function App() {
   }, []);
   useLayoutEffect(() => {
     returnScroll.current = 0;
-    spineScroll.current = undefined;
+    spineScroll.current = pendingLocation.current?.spine;
     gridScroll.current = 0; viewAnchor.current = undefined;
     viewAnimation.current?.cancel();
     scrollRef.current?.scrollTo({ top: 0 });
-  }, [page, artist, playlist, query, sort]);
+  }, [page, artist, query, sort]);
   useLayoutEffect(() => {
-    scrollRef.current?.scrollTo({ top: selected ? 0 : returnScroll.current, behavior: 'instant' });
-  }, [selected]);
+    scrollRef.current?.scrollTo({ top: selected || playlist ? 0 : returnScroll.current, behavior: 'instant' });
+  }, [selected,playlist]);
+
+  useLayoutEffect(()=>{
+    const next=pendingLocation.current;if(!next)return;pendingLocation.current=null;
+    spineScroll.current=next.spine;gridScroll.current=next.scroll;
+    scrollRef.current?.scrollTo({top:next.scroll,behavior:'instant'});
+    const shelf=scrollRef.current?.querySelector<HTMLElement>('.crate-browser');
+    if(shelf&&next.spine!==undefined)shelf.scrollLeft=next.spine;
+  });
 
 
   const search = useDeferredValue(query.trim().toLowerCase());
@@ -214,21 +252,25 @@ export default function App() {
   const trackLookup = useMemo(() => new Map(albums.flatMap(record => record.tracks.map((song,index) => [song.id,{record,song,index}] as const))), [albums]);
   const playlistTracks = useMemo(() => playlistIds.flatMap(id => { const item = trackLookup.get(id); return item ? [item] : []; }).filter(item => !search || `${item.song.title} ${item.record.artist} ${item.record.title}`.toLowerCase().includes(search)), [playlistIds,trackLookup,search]);
   const closeQueue = useCallback(() => setQueueOpen(false), []);
+  const playlistCovers=usePlaylistCovers(music.source,music.playlists,albums,music.loadPlaylist,page==='playlists');
+  const shownLists=useMemo(()=>playlistCovers.covers.filter(p=>!search||p.title.toLowerCase().includes(search)).sort((a,b)=>sort==='title'?a.title.localeCompare(b.title,'zh-CN'):0),[playlistCovers.covers,search,sort]);
+  const renderPlaylistArt=useCallback((item:Album,className:string)=><PlaylistArtwork item={item as PlaylistCover} className={className}/>,[]);
+  const openPlaylist=useCallback((item:Album)=>visit({playlist:item.id,albumId:'',query:''}),[visit]);
   const activeList=music.playlists.find(item=>item.id===playlist);
   const customLists=music.playlists.filter(item=>item.managed);
   const applyPlaylistEdit=(change:PlaylistEdit)=>{void music.editPlaylist(change).catch(e=>notify(String(e)));};
-  const addToPlaylist=(ids:string[])=>setPlaylistDialog({kind:'add',ids});
   const listActions=(list:NonNullable<typeof activeList>):MenuAction[]=>list.managed?[
-    ...(list.id===playlist?[{text:'添加歌曲…',action:()=>setAddingSongs(true)}]:[]),
-    {text:'重命名…',action:()=>setPlaylistDialog({kind:'rename',list})},
-    {text:'删除播放列表…',action:()=>setPlaylistDialog({kind:'delete',list})},
+    ...(list.id===playlist?[{text:'添加歌曲…',icon:'add' as const,action:()=>setAddingSongs(true)}]:[]),
+    {text:'重命名…',icon:'rename' as const,action:()=>setPlaylistDialog({kind:'rename',list})},
+    {text:'删除播放列表…',icon:'delete' as const,action:()=>setPlaylistDialog({kind:'delete',list})},
   ]:[];
+  const addActions=(ids:string[]):MenuAction[]=>[...customLists.map(list=>({text:list.name,icon:'playlist' as const,enabled:!ids.every(id=>list.trackIds?.includes(id)),action:()=>{void music.editPlaylist({operation:'add',id:list.id,trackIds:ids}).then(()=>notify(`已添加到「${list.name}」`)).catch(e=>notify(String(e)));}})),{text:'新建播放列表…',icon:'add' as const,action:()=>setPlaylistDialog({kind:'create',ids})}];
   const songActions=(id:string,inList=false):MenuAction[]=>[
-    {text:'添加到播放列表…',enabled:music.listsReady,action:()=>addToPlaylist([id])},
+    {text:'添加到播放列表',icon:'add' as const,enabled:music.listsReady,children:addActions([id])},
     ...(inList&&activeList?.managed?[
-      {text:'从播放列表移除',action:()=>applyPlaylistEdit({operation:'remove',id:playlist,trackIds:[id]})},
-      {text:'上移',enabled:!search&&playlistIds.indexOf(id)>0,action:()=>applyPlaylistEdit({operation:'move',id:playlist,trackIds:[id],beforeId:playlistIds[playlistIds.indexOf(id)-1]})},
-      {text:'下移',enabled:!search&&playlistIds.indexOf(id)<playlistIds.length-1,action:()=>applyPlaylistEdit({operation:'move',id:playlist,trackIds:[id],beforeId:playlistIds[playlistIds.indexOf(id)+2]})},
+      {text:'从播放列表移除',icon:'remove' as const,action:()=>applyPlaylistEdit({operation:'remove',id:playlist,trackIds:[id]})},
+      {text:'上移',icon:'up' as const,enabled:!search&&playlistIds.indexOf(id)>0,action:()=>applyPlaylistEdit({operation:'move',id:playlist,trackIds:[id],beforeId:playlistIds[playlistIds.indexOf(id)-1]})},
+      {text:'下移',icon:'down' as const,enabled:!search&&playlistIds.indexOf(id)<playlistIds.length-1,action:()=>applyPlaylistEdit({operation:'move',id:playlist,trackIds:[id],beforeId:playlistIds[playlistIds.indexOf(id)+2]})},
     ]:[]),
   ];
   const saveListDialog=async(target:string,name:string)=>{
@@ -239,7 +281,7 @@ export default function App() {
     else {
       const id=`bee:${crypto.randomUUID()}`;
       await music.editPlaylist({operation:'create',id,name,trackIds:ids});
-      if(kind==='create'){navigate('playlists');setPlaylist(id);}else notify('已添加到新播放列表');
+      if(kind==='create'){visit({page:'playlists',playlist:id,albumId:'',query:'',spine:undefined});}else notify('已添加到新播放列表');
     }
   };
   const playlistName = activeList?.name ?? '播放列表';
@@ -252,7 +294,7 @@ export default function App() {
     { page: 'playlists', label: '播放列表', icon: <ListMusic size={19}/> },
   ];
 
-  return <div style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties} className={`app native-redesign ${visible ? '' : 'app-hidden'} ${sidebarOpen ? '' : 'sidebar-collapsed'} ${page === 'artists' || (page === 'playlists' && music.playlists.length>0) ? 'three-column' : ''}`}>
+  return <div style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties} className={`app native-redesign ${visible ? '' : 'app-hidden'} ${sidebarOpen ? '' : 'sidebar-collapsed'} ${page === 'artists' ? 'three-column' : ''}`}>
     {playlistDialog&&<PlaylistDialog state={playlistDialog} lists={customLists} onSave={saveListDialog} onClose={()=>setPlaylistDialog(null)}/>}
     {addingSongs&&activeList?.managed&&<PlaylistSongs albums={albums} existing={playlistIds} onClose={()=>setAddingSongs(false)} onSave={ids=>music.editPlaylist({operation:'add',id:playlist,trackIds:ids})}/>}
     <UpdateIndicator updater={updater} open={updateOpen} setOpen={setUpdateOpen}/>
@@ -271,30 +313,35 @@ export default function App() {
     {sidebarOpen && <SidebarDivider width={sidebarWidth} onChange={setSidebarWidth} onPreview={width => { if (isTauri()) queueContentBacking(theme === 'dark', width); }}/>}
     <main className="main">
       <header className="topbar" onMouseDown={dragWindow}>
-        <div className="toolbar-leading">{!sidebarOpen && <IconButton label="显示侧栏" onClick={() => setSidebarOpen(true)}><PanelLeft size={18}/></IconButton>}<span>{selected ? selected.title : pageTitle}</span></div>
+        <div className="toolbar-leading"><div className="history-navigation" role="group" aria-label="浏览导航"><button className="icon-button" aria-label="后退" title="后退（⌘[）" disabled={!history.current.canBack} onClick={()=>travelHistory(-1)}><ArrowLeft size={18}/></button><button className="icon-button" aria-label="前进" title="前进（⌘]）" disabled={!history.current.canForward} onClick={()=>travelHistory(1)}><ArrowRight size={18}/></button></div>{!sidebarOpen && <IconButton label="显示侧栏" onClick={() => setSidebarOpen(true)}><PanelLeft size={18}/></IconButton>}<span>{selected ? selected.title : pageTitle}</span></div>
         <div className="top-actions">{music.connected&&music.listsReady&&page==='playlists'&&!selected&&<>
           <IconButton label="新建播放列表" onClick={()=>setPlaylistDialog({kind:'create'})}><Plus size={18}/></IconButton>
           {activeList?.managed&&<IconButton label="添加歌曲" onClick={()=>setAddingSongs(true)}><ListPlus size={18}/></IconButton>}
           {activeList?.managed&&<button className="icon-button" title="播放列表操作" aria-label="播放列表操作" onClick={e=>{const r=e.currentTarget.getBoundingClientRect();void actionMenu(r.left,r.bottom+4,listActions(activeList));}}><MoreHorizontal size={18}/></button>}
-        </>}{music.connected && isCollection && !selected && (page!=='playlists'||playlistIds.length>0) && <><ToolbarSearch key={page} query={query} onChange={setQuery} label="搜索资料库"/>{page !== 'playlists' && <><SortMenu value={sort} onChange={setSort}/><div className="view-toggle" role="group" aria-label="专辑显示方式"><IconButton label="封面" active={view === 'grid'} onClick={() => changeView('grid')}><Grid2X2 size={17} aria-hidden="true"/></IconButton><IconButton label="封脊" active={view === 'spines'} onClick={() => changeView('spines')}><Columns3 size={18} aria-hidden="true"/></IconButton></div></>}</>}</div>
+        </>}{music.connected && isCollection && !selected && (page!=='playlists'||music.playlists.length>0) && <><ToolbarSearch key={page} query={query} onChange={setQuery} label="搜索资料库"/>{(page !== 'playlists'||!playlist) && <><SortMenu value={sort} onChange={setSort}/><div className="view-toggle" role="group" aria-label="专辑显示方式"><IconButton label="封面" active={view === 'grid'} onClick={() => changeView('grid')}><Grid2X2 size={17} aria-hidden="true"/></IconButton><IconButton label="封脊" active={view === 'spines'} onClick={() => changeView('spines')}><Columns3 size={18} aria-hidden="true"/></IconButton></div></>}</>}</div>
       </header>
       <div className="browser-body">
-        {music.connected && page === 'artists' && <aside className="browser-column" aria-label="艺术家列表"><div className="column-list">{searchResults.artists.map(name => { return <button key={name} aria-pressed={searchResults.activeArtist === name} className={`artist-row ${searchResults.activeArtist === name ? 'selected' : ''}`} onClick={() => { setArtist(name); setSelected(null); }}><span>{name}</span></button>; })}{searchResults.artists.length === 0 && <EmptyScore compact label="未找到艺术家"/>}</div></aside>}
-        {music.connected && page === 'playlists' && music.playlists.length>0 && <aside className="browser-column" aria-label="播放列表"><div className="column-list">{music.playlists.map(item => <button className={`artist-row playlist-row ${playlist === item.id ? 'selected' : ''}`} aria-pressed={playlist === item.id} onClick={() => {setPlaylist(item.id);setSelected(null);setQuery('');}} onContextMenu={e=>{if(item.managed){e.preventDefault();void actionMenu(e.clientX,e.clientY,listActions(item));}}} key={item.id}><span className={`playlist-icon ${item.id}`}><ListMusic size={19}/></span><span>{item.name}</span></button>)}</div></aside>}
+        {music.connected && page === 'artists' && <aside className="browser-column" aria-label="艺术家列表"><div className="column-list">{searchResults.artists.map(name => { return <button key={name} aria-pressed={searchResults.activeArtist === name} className={`artist-row ${searchResults.activeArtist === name ? 'selected' : ''}`} onClick={() => visit({artist:name,albumId:'',spine:undefined})}><span>{name}</span></button>; })}{searchResults.artists.length === 0 && <EmptyScore compact label="未找到艺术家"/>}</div></aside>}
+
       <div className="main-scroll" ref={scrollRef}>
         {music.error && page!=='settings' && <div className="music-error" role="alert">{music.error}<button onClick={() => navigate('settings')}>查看设置</button></div>}
         {!music.connected && page !== 'settings' && <EmptyScore label="尚未连接音乐，可在设置中选择音乐库"/>}
         {music.connected && page === 'playing' && !album && <EmptyScore label="暂无正在播放的歌曲"/>}
 
         {music.connected && isCollection && page !== 'playlists' && !selected && <div className={`library-page ${view === 'spines' ? 'shelf-page' : ''}`}>
-          {view === 'grid' ? <AlbumGrid albums={shownAlbums} showYear={page === 'artists'} onOpen={openAlbum} onPlay={startAlbum}/> : shownAlbums.length > 0 && <SpineBrowser albums={shownAlbums} onOpen={openAlbum} initialScroll={spineScroll.current} initialAlbumId={viewAnchor.current} onScrollPosition={saveSpineScroll}/>}
+          {view === 'grid' ? <AlbumGrid albums={shownAlbums} showYear={page === 'artists'} onOpen={openAlbum} onPlay={startAlbum}/> : shownAlbums.length > 0 && <SpineBrowser albums={shownAlbums} onOpen={openAlbum} initialScroll={spineScroll.current} onScrollPosition={saveSpineScroll}/>}
           {!shownAlbums.length && <EmptyScore label={query ? '没有符合条件的专辑' : '资料库暂无专辑'}/>}
 
         </div>}
 
-        {music.connected && page === 'playlists' && !selected && <section className={`playlist-content ${!playlistTracks.length ? 'playlist-empty' : ''}`}>{playlistTracks.length>0&&<><div className="playlist-actions"><button className="dark-button" disabled={playlistLoading || !playlistIds.length} onClick={() => void music.playPlaylist(playlist)}><Play size={14} fill="currentColor"/>播放</button></div><div className="playlist-table"><div className="playlist-table-head"><span>#</span><span>歌曲</span><span>专辑</span><span>时长</span></div>{playlistTracks.map(({record,song,index},row) => <button className={`playlist-song ${record.id === currentId && trackIndex === index ? 'current' : ''}`} key={`${song.id}-${row}`} draggable={!!activeList?.managed&&!search} onDragStart={e=>{draggedSong.current=song.id;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',song.id);}} onDragEnd={()=>{draggedSong.current=null;document.querySelectorAll('[data-drop]').forEach(node=>node.removeAttribute('data-drop'));}} onDragOver={e=>{if(activeList?.managed&&!search&&draggedSong.current){e.preventDefault();e.dataTransfer.dropEffect='move';const r=e.currentTarget.getBoundingClientRect();e.currentTarget.dataset.drop=e.clientY>r.top+r.height/2?'after':'before';}}} onDragLeave={e=>{delete e.currentTarget.dataset.drop;}} onDrop={e=>{e.preventDefault();delete e.currentTarget.dataset.drop;const id=draggedSong.current;draggedSong.current=null;if(id&&id!==song.id){const r=e.currentTarget.getBoundingClientRect();const at=playlistIds.indexOf(song.id);applyPlaylistEdit({operation:'move',id:playlist,trackIds:[id],beforeId:e.clientY>r.top+r.height/2?playlistIds[at+1]:song.id});}}} onContextMenu={e=>{e.preventDefault();void trackMenu(e.clientX,e.clientY,()=>void music.playPlaylist(playlist,song.id),()=>void music.playTrack(record,index,true),songActions(song.id,true));}} onClick={() => music.playPlaylist(playlist,song.id)}><span className="song-number">{record.id === currentId && trackIndex === index && playing ? <span className="equalizer"><i/><i/><i/></span> : row+1}</span><span className="song-title"><Artwork album={record} alt=""/><span>{song.title}<small>{record.artist}</small></span></span><span className="song-album">{record.title}</span><span className="song-time">{time(song.duration)}</span></button>)}</div></>}{!playlistTracks.length && <EmptyScore label={playlistLoading ? '正在读取播放列表' : '暂无歌曲'}/>}</section>}
+        {music.connected&&page==='playlists'&&!playlist&&!selected&&<div className={`library-page playlist-library ${view==='spines'?'shelf-page':''}`}>
+          {playlistCovers.error&&<p className="settings-error" role="alert">{playlistCovers.error}</p>}
+          {view==='grid'?<AlbumGrid albums={shownLists} showYear={false} onOpen={openPlaylist} onPlay={item=>void music.playPlaylist(item.id)} renderArtwork={renderPlaylistArt}/>:shownLists.length>0&&<SpineBrowser albums={shownLists} onOpen={openPlaylist} initialScroll={spineScroll.current} onScrollPosition={saveSpineScroll} renderArtwork={renderPlaylistArt}/>}
+          {!shownLists.length&&<EmptyScore label={query?'没有匹配的播放列表':'暂无播放列表'}/>}
+        </div>}
+        {music.connected && page === 'playlists' && !!playlist && !selected && <section className={`playlist-content ${!playlistTracks.length ? 'playlist-empty' : ''}`}>{playlistTracks.length>0&&<><div className="playlist-detail-header">{playlistCovers.covers.find(p=>p.id===playlist)&&<PlaylistArtwork item={playlistCovers.covers.find(p=>p.id===playlist)!} className="playlist-detail-cover"/>}<div><p className="preference-value">{playlistIds.length} 首歌曲</p><div className="detail-actions"><button className="detail-icon-action" title="播放列表" aria-label="播放列表" disabled={playlistLoading || !playlistIds.length} onClick={() => void music.playPlaylist(playlist)}><Play size={18} fill="currentColor"/></button></div></div></div><div className="playlist-table"><div className="playlist-table-head"><span>#</span><span>歌曲</span><span>专辑</span><span>时长</span></div>{playlistTracks.map(({record,song,index},row) => <button className={`playlist-song ${record.id === currentId && trackIndex === index ? 'current' : ''}`} key={`${song.id}-${row}`} draggable={!!activeList?.managed&&!search} onDragStart={e=>{draggedSong.current=song.id;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',song.id);}} onDragEnd={()=>{draggedSong.current=null;document.querySelectorAll('[data-drop]').forEach(node=>node.removeAttribute('data-drop'));}} onDragOver={e=>{if(activeList?.managed&&!search&&draggedSong.current){e.preventDefault();e.dataTransfer.dropEffect='move';const r=e.currentTarget.getBoundingClientRect();e.currentTarget.dataset.drop=e.clientY>r.top+r.height/2?'after':'before';}}} onDragLeave={e=>{delete e.currentTarget.dataset.drop;}} onDrop={e=>{e.preventDefault();delete e.currentTarget.dataset.drop;const id=draggedSong.current;draggedSong.current=null;if(id&&id!==song.id){const r=e.currentTarget.getBoundingClientRect();const at=playlistIds.indexOf(song.id);applyPlaylistEdit({operation:'move',id:playlist,trackIds:[id],beforeId:e.clientY>r.top+r.height/2?playlistIds[at+1]:song.id});}}} onContextMenu={e=>{e.preventDefault();void trackMenu(e.clientX,e.clientY,()=>void music.playPlaylist(playlist,song.id),()=>void music.playTrack(record,index,true),songActions(song.id,true));}} onClick={() => music.playPlaylist(playlist,song.id)}><span className="song-number">{record.id === currentId && trackIndex === index && playing ? <span className="equalizer"><i/><i/><i/></span> : row+1}</span><span className="song-title"><Artwork album={record} alt=""/><span>{song.title}<small>{record.artist}</small></span></span><span className="song-album">{record.title}</span><span className="song-time">{time(song.duration)}</span></button>)}</div></>}{!playlistTracks.length && <EmptyScore label={playlistLoading ? '正在读取播放列表' : '暂无歌曲'}/>}</section>}
 
-      {selected && <section className="album-detail-page"><button className="detail-back text-button" onClick={closeAlbum}><ArrowLeft size={17}/>返回</button><div className="album-detail-header" style={{ background: selected.color, color: selected.ink }}><div className="detail-record-art"><Vinyl album={selected}/><Artwork album={selected} alt={`${selected.title} 封面`}/></div><div><p>{selected.artist}</p><small>{selected.year} · {selected.genre} · {selected.tracks.length} 首歌曲</small><div className="detail-actions"><button className="dark-button" onClick={() => startAlbum(selected)}><Play size={14} fill="currentColor"/>播放</button><button className="text-button" disabled={!music.listsReady} onClick={()=>addToPlaylist(selected.tracks.map(t=>t.id))}><ListPlus size={16}/>添加到播放列表</button></div></div></div><div className="track-list">{selected.tracks.map((item, index) => <button className={`track-row ${currentId === selected.id && trackIndex === index ? 'current' : ''}`} key={item.id} onContextMenu={e=>{e.preventDefault();void trackMenu(e.clientX,e.clientY,()=>void music.playTrack(selected,index),()=>void music.playTrack(selected,index,true),songActions(item.id));}} onClick={() => music.playTrack(selected, index)}><span className="track-number">{currentId === selected.id && trackIndex === index && playing ? <span className="equalizer"><i/><i/><i/></span> : String(index + 1).padStart(2, '0')}</span><span>{item.title}</span><span>{time(item.duration)}</span><Play size={13}/></button>)}</div></section>}
+      {selected && <section className="album-detail-page"><div className="album-detail-header" style={{ background: selected.color, color: selected.ink }}><div className="detail-record-art"><Vinyl album={selected}/><Artwork album={selected} alt={`${selected.title} 封面`}/></div><div><p>{selected.artist}</p><small>{selected.year} · {selected.genre} · {selected.tracks.length} 首歌曲</small><div className="detail-actions"><button className="detail-icon-action" title="播放专辑" aria-label="播放专辑" onClick={()=>startAlbum(selected)}><Play size={18} fill="currentColor" strokeWidth={1.5}/></button><button className="detail-icon-action" title="添加到播放列表" aria-label="添加到播放列表" disabled={!music.listsReady} onClick={e=>{const r=e.currentTarget.getBoundingClientRect();void actionMenu(r.left,r.bottom+4,addActions(selected.tracks.map(t=>t.id)));}}><ListPlus size={19}/></button></div></div></div><div className="track-list">{selected.tracks.map((item, index) => <button className={`track-row ${currentId === selected.id && trackIndex === index ? 'current' : ''}`} key={item.id} onContextMenu={e=>{e.preventDefault();void trackMenu(e.clientX,e.clientY,()=>void music.playTrack(selected,index),()=>void music.playTrack(selected,index,true),songActions(item.id));}} onClick={() => music.playTrack(selected, index)}><span className="track-number">{currentId === selected.id && trackIndex === index && playing ? <span className="equalizer"><i/><i/><i/></span> : String(index + 1).padStart(2, '0')}</span><span>{item.title}</span><span>{time(item.duration)}</span><Play size={13}/></button>)}</div></section>}
 
         {music.connected && page === 'playing' && !selected && album && track && <section className="minimal-player" aria-label={track.title}>
           <div className="listening-stack">

@@ -1,10 +1,10 @@
 import { playUISound } from './uiSounds';
 import { Artwork } from './Artwork';
-import { memo, forwardRef, useImperativeHandle, useState, useLayoutEffect, useMemo, useRef, type CSSProperties } from 'react';
+import { memo, forwardRef, useImperativeHandle, useState, useLayoutEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
 import type { Album } from './data';
 import { lowerBound, nearestShelfSlot } from './shelfPositions';
 
-export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initialScroll, initialAlbumId, onScrollPosition }: { albums: Album[]; onOpen: (album: Album) => void; initialScroll?: number; initialAlbumId?: string; onScrollPosition?: (position: number) => void }) {
+export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initialScroll, onScrollPosition, renderArtwork }: { albums: Album[]; onOpen: (album: Album) => void; initialScroll?: number; onScrollPosition?: (position: number) => void; renderArtwork?:(album:Album,className:string)=>ReactNode }) {
   const caption = useRef<{show:(album:Album|null)=>void}>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const travel = useRef<(position: number) => void>(() => {});
@@ -101,7 +101,7 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
       const firstCenter = items[0] ? items[0].offsetLeft + items[0].offsetWidth/2 : 0;
       const stride = items[1] ? items[1].offsetLeft + items[1].offsetWidth/2 - firstCenter : 112;
       centers = items.map((_,index)=>firstCenter+index*stride);
-      if (!measured) { const anchorIndex = restorePosition ? albums.findIndex(album => album.id === initialAlbumId) : -1; root.scrollLeft = clamp((restorePosition ? initialScroll : undefined) ?? (anchorIndex >= 0 ? centers[anchorIndex] - width/2 : max / 2)); measured = true; }
+      if (!measured) { root.scrollLeft = clamp((restorePosition ? initialScroll : undefined) ?? max / 2); measured = true; }
       else {
         const spacing = centers.length > 1 ? centers[1] - centers[0] : 112;
         root.scrollLeft = clamp((centers[0] ?? 0) + anchor * spacing - width / 2);
@@ -196,7 +196,7 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
     };
   }, [albumKey]);
 
-  return <div className="crate-layout"><div className="crate-browser" ref={viewport} aria-label="立体唱片架" onPointerLeave={()=>caption.current?.show(null)} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node))caption.current?.show(null);}}>
+  return <div className={`crate-layout ${renderArtwork?'playlist-crate':''}`}><div className="crate-browser" ref={viewport} aria-label="立体唱片架" onPointerLeave={()=>caption.current?.show(null)} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node))caption.current?.show(null);}}>
     <div className="crate-stack">
       {albums.map((album, index) => <button type="button" className="crate-item" key={album.id}
         onFocus={()=>caption.current?.show(album)}
@@ -225,7 +225,7 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
           }
         }}>
         <span className="crate-sleeve">
-          <span className="crate-cover" data-album-art={album.id}><Artwork className="crate-front" album={album} alt="" draggable={false}/><Artwork className="crate-back" album={album} alt="" draggable={false}/></span>
+          <span className="crate-cover" data-album-art={album.id}>{renderArtwork?<>{renderArtwork(album,'crate-front')}{renderArtwork(album,'crate-back')}</>:<><Artwork className="crate-front" album={album} alt="" draggable={false}/><Artwork className="crate-back" album={album} alt="" draggable={false}/></>}</span>
           <span className="crate-spine"><strong>{album.title}</strong><span>{album.artist}</span></span>
         </span>
       </button>)}

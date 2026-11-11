@@ -12,7 +12,7 @@ export function useAlbumTransition(scrollRef: RefObject<HTMLDivElement | null>) 
     const root = scrollRef.current;
     if (!root) { update(); return; }
     const artwork = (detail: boolean) => detail
-      ? root.querySelector<HTMLElement>('.detail-record-art>img')
+      ? root.querySelector<HTMLElement>('.detail-record-art>img,.playlist-detail-cover')
       : [...root.querySelectorAll<HTMLElement>('[data-album-art]')].find(node => node.dataset.albumArt === albumId) ?? null;
     const sourceNode = artwork(!opening);
     const source = sourceNode?.getBoundingClientRect();
@@ -40,7 +40,7 @@ export function useAlbumTransition(scrollRef: RefObject<HTMLDivElement | null>) 
     } else {
       animate(target, [{opacity:.25},{opacity:1}], 170);
     }
-    const layers = opening ? root.querySelectorAll('.album-detail-header>div:last-child,.track-list,.detail-back,.detail-record-art>.vinyl') : [];
+    const layers = opening ? root.querySelectorAll('.album-detail-header>div:last-child,.track-list,.playlist-table,.detail-back,.detail-record-art>.vinyl') : [];
     for (const layer of layers) animate(layer, [{opacity:0},{opacity:1}], 180);
   }, [scrollRef, cancel]);
 }

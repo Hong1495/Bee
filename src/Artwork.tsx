@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState, type ImgHTMLAttributes } from 'react';
 import type { Album } from './data';
 import { loadArtwork, peekArtwork, forgetArtwork } from './artworkCache';
+import {fallbackArtwork} from './fallbackArtwork';
 import { sampleRecordPalette } from './recordPalette';
 
 // A single observer serves the entire shelf, including both faces of sleeves.
@@ -30,5 +31,8 @@ export const Artwork = memo(function Artwork({album, ...props}: {album:Album} & 
   }, [album,revision]);
   const cached = peekArtwork(album.id);
   const failed = useRef('');
-  return <img {...props} crossOrigin="anonymous" onLoad={event => { sampleRecordPalette(album.id,event.currentTarget); props.onLoad?.(event); }} onError={() => { if(failed.current===album.id)return;failed.current=album.id;forgetArtwork(album.id);void loadArtwork(album).then(url=>{if(url)setImage({id:album.id,url:url+'?reload='+Date.now()});}); }} ref={ref} src={image?.id === album.id ? image.url : cached ?? album.artwork} decoding={cached ? 'sync' : 'async'}/>;
+  const fallback=fallbackArtwork(album.id);
+  const [broken,setBroken]=useState('');
+  const source=image?.id===album.id?image.url:cached??(album.artwork&&album.artwork!=='/artwork/placeholder.svg'?album.artwork:fallback);
+  return <img {...props} crossOrigin="anonymous" onLoad={event => { sampleRecordPalette(album.id,event.currentTarget); props.onLoad?.(event); }} onError={() => { setBroken(source); if(failed.current===album.id)return;failed.current=album.id;forgetArtwork(album.id);void loadArtwork(album).then(url=>{if(url)setImage({id:album.id,url:url+'?reload='+Date.now()});}); }} ref={ref} src={broken===source?fallback:source} decoding={cached ? 'sync' : 'async'}/>;
 });

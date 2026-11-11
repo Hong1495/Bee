@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';import ts from 'typescript';
+const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/navigationHistory.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,{exports});
+const history=exports.createNavigationHistory({page:'library',scroll:0},(a,b)=>a.page===b.page);
+assert.equal(history.canBack,false);assert.equal(history.canForward,false);
+assert.equal(history.visit({page:'library',scroll:120},{page:'album',scroll:0}),true);
+assert.equal(history.move({page:'album',scroll:40},-1).scroll,120);assert.equal(history.canForward,true);
+assert.equal(history.move({page:'library',scroll:180},1).scroll,40);
+history.move({page:'album',scroll:45},-1);history.visit({page:'library',scroll:180},{page:'settings',scroll:0});assert.equal(history.canForward,false);
+assert.equal(history.visit({page:'settings',scroll:0},{page:'settings',scroll:0}),false);
+assert.equal(history.move({page:'settings',scroll:0},-1).page,'library');assert.equal(history.move({page:'library',scroll:0},-1),null);
+history.reset({page:'library',scroll:0});assert.equal(history.canForward,false);assert.equal(history.canBack,false);
+console.log('PASS: back/forward boundaries, scroll restoration, branch truncation, duplicate navigation and source reset');
