@@ -19,6 +19,7 @@ fn artist_key(value:&str)->String {
   "陈奕迅"|"陳奕迅"|"easonchan"=>"easonchan".into(),
   "林俊杰"|"林俊傑"|"jjlin"=>"jjlin".into(),
   "孙燕姿"|"孫燕姿"|"stefaniesun"=>"stefaniesun".into(),
+  "叶倩文"|"葉倩文"|"叶蒨文"|"葉蒨文"|"sallyyeh"=>"sallyyeh".into(),
   _=>key,
  }
 }
@@ -101,6 +102,11 @@ fn endpoint(base:&str,path:&str)->Result<Url,String>{
  if u.scheme()!="https"{return Err("歌词源须使用 HTTPS".into());}
  u.set_path(&format!("{}{}",u.path().trim_end_matches('/'),path));Ok(u)
 }
+// Reinterpret cached responses using current placeholder rules instead of
+// discarding valid timed lyrics whenever presentation semantics change.
+fn cached_result(value:&Value)->Option<Value>{
+ result(value["synced"].as_str().unwrap_or(""),value["plain"].as_str().unwrap_or(""),value["source"].as_str().unwrap_or(""),value["instrumental"].as_bool().unwrap_or(false))
+}
 fn get(client:&Client,url:Url)->Result<Option<Value>,String>{
  let response=client.get(url).send().map_err(|_|"歌词源连接失败")?;
  if response.status()==reqwest::StatusCode::NOT_FOUND{return Ok(None);}
@@ -180,7 +186,14 @@ pub async fn lyrics_request(app:tauri::AppHandle,song:Song,refresh:Option<bool>)
  let key=format!("{:x}",Sha256::digest(serde_json::to_vec(&(6,&song,&prefs.providers)).unwrap()));
   let path=storage::cache(&app)?.join("lyrics-v1").join(format!("{key}.json"));
   {let _gate=storage::CACHE_LOCK.lock().map_err(|_|"缓存不可用")?;
-   if !refresh.unwrap_or(false){if let Ok(bytes)=std::fs::read(&path){if let Ok(value)=serde_json::from_slice::<Value>(&bytes){let ttl=if value["synced"].as_str().is_some_and(|s|!s.is_empty()){30*86400}else{3600};if std::fs::metadata(&path).ok().and_then(|m|m.modified().ok()).and_then(|t|t.elapsed().ok()).is_some_and(|age|age.as_secs()<ttl){return Ok(value);}}}}
+   if !refresh.unwrap_or(false){for version in [6,5]{
+    let key=format!("{:x}",Sha256::digest(serde_json::to_vec(&(version,&song,&prefs.providers)).unwrap()));
+    let candidate=path.with_file_name(format!("{key}.json"));
+    if let Ok(bytes)=std::fs::read(&candidate){if let Ok(raw)=serde_json::from_slice::<Value>(&bytes){if let Some(value)=cached_result(&raw){
+     let ttl=if value["synced"].as_str().is_some_and(|s|!s.is_empty()){30*86400}else{3600};
+     if std::fs::metadata(&candidate).ok().and_then(|m|m.modified().ok()).and_then(|t|t.elapsed().ok()).is_some_and(|age|age.as_secs()<ttl){return Ok(value);}
+    }}}
+   }}
   }
   let client=Client::builder().timeout(Duration::from_secs(6)).connect_timeout(Duration::from_secs(3)).user_agent("Bee/0.1 (https://github.com/Hong1495/Bee)").build().map_err(|e|e.to_string())?;
   let mut fallback=None;let mut failures=0;let mut successes=0;
@@ -199,6 +212,28 @@ pub async fn lyrics_request(app:tauri::AppHandle,song:Song,refresh:Option<bool>)
 #[cfg(test)]
 mod tests{
  use super::*;
+ #[test]fn cached_timed_lyrics_survive_placeholder_migration(){
+  let text="[00:01.00]One\n[00:05.00]Two";
+  let value=cached_result(&json!({"synced":text,"plain":"","source":"netease","instrumental":false})).unwrap();
+  assert_eq!(value["synced"],text);assert_eq!(value["instrumental"],false);
+  let placeholder=cached_result(&json!({"synced":"[00:00.00]纯音乐，请欣赏\n[00:10.00]","source":"netease"})).unwrap();
+  assert_eq!(placeholder["instrumental"],true);assert_eq!(placeholder["synced"],"");
+ }
+ #[test]fn sally_yeh_spelling_variants_keep_recording_checks(){
+  let s=Song{title:"烛光".into(),artist:"叶倩文".into(),album:"烛光".into(),duration:249.0};
+  for artist in ["叶蒨文","葉蒨文","葉倩文","Sally Yeh"]{assert!(score(&s,"烛光",&[artist.into()],"昨叶情",249.892).is_some());}
+  assert!(score(&s,"烛光",&["孙耀威".into()],"",249.0).is_none());
+  assert!(score(&s,"烛光",&["叶蒨文".into()],"",270.0).is_none());
+ }
+ #[test]
+ #[ignore = "Requires provider network access"]
+ fn candlelight_finds_timed_lyrics(){
+  let client=Client::builder().timeout(Duration::from_secs(8)).user_agent("Bee/0.1").build().unwrap();
+  let p=Provider{kind:"netease".into(),enabled:true,url:"https://music.163.com".into()};
+  let s=Song{title:"烛光".into(),artist:"叶倩文".into(),album:"烛光".into(),duration:249.0};
+  let value=netease(&client,&p,&s).unwrap().expect("matched original recording");
+  assert!(timed(value["synced"].as_str().unwrap()));assert_eq!(value["instrumental"],false);
+ }
  #[test]fn instrumental_placeholders_are_not_lyrics(){
   for text in ["[00:00.00]纯音乐，请欣赏", "[ar:久石让]\n[00:00.00]此歌曲为没有填词的纯音乐，请您欣赏\n[00:10.00]", "純音樂，請欣賞", "Instrumental"] {
    let value=result(text,"","netease",false).unwrap();
