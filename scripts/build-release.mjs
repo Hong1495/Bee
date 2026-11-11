@@ -11,6 +11,8 @@ if(!process.env.TAURI_SIGNING_PRIVATE_KEY&&!fs.existsSync(key))throw new Error('
 const result=spawnSync('npm',['run','tauri','--','build'],{stdio:'inherit',env:{...process.env,TAURI_SIGNING_PRIVATE_KEY:key,TAURI_SIGNING_PRIVATE_KEY_PASSWORD:process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD||''}});
 if(result.status!==0)process.exit(result.status||1);
 const root='src-tauri/target/release/bundle';
+const signatureCheck=spawnSync('codesign',['--verify','--deep','--strict','--verbose=2',`${root}/macos/Bee.app`],{stdio:'inherit'});
+if(signatureCheck.status!==0)throw new Error('App bundle signature validation failed; do not publish.');
 const archive=`Bee_${version}_aarch64.app.tar.gz`;
 const dmg=`Bee_${version}_aarch64.dmg`;
 const out=`release/${version}`;fs.mkdirSync(out,{recursive:true});

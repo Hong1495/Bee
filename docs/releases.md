@@ -16,7 +16,10 @@ For each release:
 1. Keep versions in package.json, Cargo.toml and tauri.conf.json aligned; refresh
    their lockfiles. Update `docs/release-notes.md`.
 2. Run `npm run check` and `cargo test --manifest-path src-tauri/Cargo.toml`.
-3. Build with `npm run release:build` on Apple Silicon. Verify the DMG, executable
+3. Build with `npm run release:build` on Apple Silicon. The app bundle uses
+   explicit ad-hoc signing (`signingIdentity: "-"`) until a Developer ID is
+   available, and the build script rejects bundles failing strict codesign
+   validation. Verify the DMG, executable
    architecture, archive signature and generated manifest before uploading.
 4. Commit changes, push main, and create a draft GitHub Release with tag
    `v<version>` targeting that commit. Upload every file from `release/<version>/`.
@@ -37,3 +40,7 @@ ID certificate or Apple notarization; do not describe it as notarized. Install
 Bee.app in a writable Applications folder before using in-app updates, rather
 than running directly from the read-only DMG. Test a subsequent version using an
 isolated copy of the installed app; do not replace a user's running app to test.
+
+0.1.0 had only a linker signature and failed bundle resource validation. Do not
+reuse its DMG or updater archive; 0.1.1 rebuilds both from a fully sealed bundle.
+Ad-hoc integrity validation does not grant Gatekeeper trust or notarization.
