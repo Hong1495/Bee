@@ -445,8 +445,11 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,.native-redesign::-webkit-scroll
 /* Keep the deck, lyrics and controls in one stable, slightly raised group. */
 .native-redesign .minimal-player { flex-direction:column; gap:0; padding:24px 30px 48px; }
 .listening-stack { width:min(80%,752px,calc((100dvh - 340px) * 1.55)); flex-shrink:0; }
-.native-redesign .minimal-player .minimal-deck { width:100%; }
-.listening-footer { width:87.5%; display:flex; flex-direction:column; align-items:center; gap:28px; margin-top:36px; }
+/* The rotated sleeve starts slightly before the stage, while the arm ends
+   short of its right edge. Balance their visible bounds with a fixed offset;
+   never recenter against the moving arm or playback progress. */
+.native-redesign .minimal-player .minimal-deck { width:100%; transform:translateX(2.5%); }
+.listening-footer { width:100%; display:flex; flex-direction:column; align-items:center; gap:28px; margin-top:36px; }
 .synced-lyrics,.lyrics-space,.lyrics-plain { height:112px; width:min(92%,560px); flex-shrink:0; text-align:center; }
 .synced-lyrics { overflow:hidden; mask-image:linear-gradient(transparent,#000 16%,#000 84%,transparent); -webkit-mask-image:linear-gradient(transparent,#000 16%,#000 84%,transparent); }
 .lyrics-track { position:relative; transition:transform .28s cubic-bezier(.22,.7,.2,1); }
