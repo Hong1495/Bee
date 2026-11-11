@@ -1,10 +1,11 @@
 import { playUISound } from './uiSounds';
 import { Artwork } from './Artwork';
-import { memo, useLayoutEffect, useMemo, useRef, type CSSProperties } from 'react';
+import { memo, forwardRef, useImperativeHandle, useState, useLayoutEffect, useMemo, useRef, type CSSProperties } from 'react';
 import type { Album } from './data';
 import { lowerBound, nearestShelfSlot } from './shelfPositions';
 
 export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initialScroll, initialAlbumId, onScrollPosition }: { albums: Album[]; onOpen: (album: Album) => void; initialScroll?: number; initialAlbumId?: string; onScrollPosition?: (position: number) => void }) {
+  const caption = useRef<{show:(album:Album|null)=>void}>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const travel = useRef<(position: number) => void>(() => {});
   const suppressClick = useRef(false);
@@ -15,6 +16,7 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
   saveScroll.current = onScrollPosition;
 
   useLayoutEffect(() => {
+    caption.current?.show(null);
     const root = viewport.current;
     if (!root) return;
     const items = [...root.querySelectorAll<HTMLElement>('.crate-item')];
@@ -180,10 +182,13 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
     };
   }, [albumKey]);
 
-  return <div className="crate-browser" ref={viewport} aria-label="立体唱片架">
+  return <div className="crate-layout"><div className="crate-browser" ref={viewport} aria-label="立体唱片架" onPointerLeave={()=>caption.current?.show(null)} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node))caption.current?.show(null);}}>
     <div className="crate-stack">
       {albums.map((album, index) => <button type="button" className="crate-item" key={album.id}
+        onFocus={()=>caption.current?.show(album)}
+        onPointerLeave={()=>caption.current?.show(null)}
         onPointerEnter={event => {
+          if(event.pointerType==='mouse')caption.current?.show(album);
           if (event.pointerType === 'mouse' && !event.buttons && performance.now() >= hoverMutedUntil.current) {
             playUISound('flat-hover');
           }
@@ -211,5 +216,15 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
         </span>
       </button>)}
     </div>
-  </div>;
+  </div><AlbumCaption ref={caption}/></div>;
+});
+
+// Isolate hover text updates from the potentially large sleeve tree.
+const AlbumCaption = forwardRef<{show:(album:Album|null)=>void}>(function AlbumCaption(_,ref){
+ const [album,setAlbum]=useState<Album|null>(null);
+ useImperativeHandle(ref,()=>({show:setAlbum}),[]);
+ return <div className={`crate-caption ${album?'visible':''}`} aria-live="polite" aria-atomic="true">
+  <div className="crate-caption-title">{album?.title}</div>
+  <div className="crate-caption-artist">{album?[album.artist,album.year].filter(Boolean).join(' · '):''}</div>
+ </div>;
 });
