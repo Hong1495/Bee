@@ -6,6 +6,8 @@ mod music;
 mod storage;
 mod restart;
 mod playlists;
+#[cfg(target_os = "macos")]
+mod menu_appearance;
 
 #[derive(Debug, PartialEq)]
 enum ReopenAction {
@@ -141,6 +143,8 @@ fn main() {
         .manage(music::MusicBridge::default())
         .manage(local::LocalMedia::default())
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            menu_appearance::install();
             #[cfg(target_os = "macos")]
             {
                 use objc2::{MainThreadMarker, MainThreadOnly};

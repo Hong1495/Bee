@@ -133,11 +133,11 @@ html[data-native=true],html[data-native=true] body{background:transparent}body{b
 .crate-cover img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; backface-visibility:hidden; border-radius:2px; box-shadow:0 1px 2px #0005; }
 .crate-cover .crate-back { transform:rotateY(180deg); }
 .crate-spine { position:absolute; z-index:1; left:calc(50% - 6px); top:0; height:100%; width:12px; background:var(--sleeve-color); color:var(--sleeve-ink); display:flex; justify-content:center; align-items:center; gap:12px; padding:12px 0; box-shadow:inset 1px 0 #ffffff80,inset -1px 0 #0002,3px 2px 5px #0002; border-radius:1px; pointer-events:none; white-space:nowrap; overflow:hidden; writing-mode:vertical-rl; }
-.crate-spine strong { font-size:11px; font-weight:650; overflow:hidden; text-overflow:ellipsis; }
-.crate-spine>span { font-size:10px; opacity:.8; overflow:hidden; text-overflow:ellipsis; }
+.crate-spine strong { font-size:10px; line-height:12px; font-weight:500; overflow:hidden; text-overflow:ellipsis; }
+.crate-spine>span { font-size:9px; line-height:12px; opacity:.85; overflow:hidden; text-overflow:ellipsis; }
 /* Hover lifts the sleeve itself; keyboard focus marks only the spine. */
 .crate-item,.crate-item:focus-visible { outline:none; }
-.crate-sleeve { position:absolute; inset:0; display:block; perspective:1100px; transform:translateY(0); transition:transform 220ms cubic-bezier(.2,.7,.2,1); }
+.crate-sleeve { position:absolute; inset:0; display:block; perspective:1100px; transform:none; transition:transform 220ms cubic-bezier(.2,.7,.2,1); }
 .crate-cover { will-change:transform; }
 .crate-item:hover .crate-sleeve { transform:translateY(-4px); }
 .crate-item:focus-visible .crate-spine { box-shadow:inset 2px 0 var(--accent),inset -2px 0 var(--accent),2px 3px 8px #0002; }
@@ -606,13 +606,27 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,.native-redesign::-webkit-scroll
 .playlist-detail-cover { width:144px; height:144px; border-radius:3px; box-shadow:0 4px 14px #0002; flex-shrink:0; }
 .playlist-detail-header p { font-size:12px; }
 .playlist-crate .crate-cover>.playlist-artwork { display:grid; }
-.native-redesign .playlist-card .album-art { padding:6px 10px 12px 4px; }
+/* Share album cover sizing and play-button placement; only the stacked sleeve differs. */
 .native-redesign .playlist-card .album-open { aspect-ratio:1; }
 .native-redesign .playlist-card .album-cover { width:100%; height:auto; aspect-ratio:1; }
-.native-redesign .playlist-card .album-art .album-play { right:18px; }
-.native-redesign .playlist-card .album-art::before { inset:6px 10px 12px 4px; transform:translate(4px,-4px); }
+.native-redesign .playlist-card .album-art::before { inset:4px 22% 12px 4px; transform:translate(4px,-4px); }
 .history-navigation { display:flex; align-items:center; gap:2px; flex-shrink:0; }
 .history-navigation .icon-button { width:28px; height:28px; background:transparent; border-radius:5px; box-shadow:none; color:var(--text); }
 .history-navigation .icon-button:hover:not(:disabled) { background:var(--soft); }
 .history-navigation .icon-button:disabled { opacity:.25; cursor:default; }
 .toolbar-leading>span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Fixed window controls: traffic lights + reserved update dot, then navigation.
+   Keep the same hit targets and screen position when the sidebar is hidden. */
+.window-navigation { position:absolute; z-index:5; left:112px; top:0; height:var(--chrome-height); display:flex; align-items:center; gap:4px; }
+.window-navigation .history-navigation { gap:4px; }
+.native-redesign .window-navigation .icon-button { width:28px; height:28px; flex-shrink:0; border-radius:5px; background:transparent; box-shadow:none; color:var(--text); }
+.native-redesign .window-navigation .icon-button:hover:not(:disabled) { background:var(--soft); }
+.native-redesign .window-navigation .icon-button:disabled { opacity:.25; cursor:default; }
+.native-redesign .toolbar-leading { gap:0; padding-left:max(0px,calc(224px - var(--sidebar-width) - 20px)); }
+.native-redesign.sidebar-collapsed .topbar { padding-left:224px; }
+.native-redesign.sidebar-collapsed .toolbar-leading { padding-left:0; }
+.playlist-detail-info { min-width:0; }
+.playlist-detail-header .playlist-artists { font-size:14px; line-height:1.5; font-weight:500; color:var(--text); margin:0 0 8px; overflow-wrap:anywhere; }
+.playlist-detail-header .playlist-summary { font-size:12px; line-height:1.6; color:var(--muted); margin:0; }
+.playlist-detail-info .detail-actions { margin-top:18px; }

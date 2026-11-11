@@ -14,13 +14,13 @@ const paths:Record<MenuSymbol,string[]>={
 // Render at native menu size with Retina backing. Cache per system appearance;
 // AppKit menus follow macOS appearance, independently of Bee's content theme.
 const cache=new Map<string,Promise<Image>>();
-export function menuIcon(symbol:MenuSymbol,submenu=false){
+export function menuIcon(symbol:MenuSymbol){
  const dark=matchMedia('(prefers-color-scheme: dark)').matches;
- const key=`${dark}:${symbol}:${submenu}`;
+ const key=`${dark}:${symbol}`;
  let image=cache.get(key);
  if(!image){
   image=(async()=>{
-   const size=submenu?16:32;
+   const size=32;
    const canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;
    const ctx=canvas.getContext('2d')!;ctx.scale(size/16,size/16);ctx.strokeStyle=dark?'#dedee2':'#48484c';ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=1.25;ctx.lineCap='round';ctx.lineJoin='round';
    for(const path of paths[symbol])ctx.stroke(new Path2D(path));

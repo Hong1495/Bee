@@ -5,7 +5,7 @@ import {menuIcon,type MenuSymbol} from './menuIcons';
 let current:Menu|null=null;
 export type MenuAction={text:string;icon?:MenuSymbol;action?:()=>void;enabled?:boolean;children?:MenuAction[]};
 async function build(item:MenuAction):Promise<MenuItem|IconMenuItem|Submenu>{
- const icon=item.icon?await menuIcon(item.icon,!!item.children):undefined;
+ const icon=item.icon?await menuIcon(item.icon):undefined;
  if(!item.children){const options={text:item.text,enabled:item.enabled,action:item.action};return icon?IconMenuItem.new({...options,icon}):MenuItem.new(options);}
  const items=await Promise.all(item.children.map(build));
  const menu=await Submenu.new({text:item.text,enabled:item.enabled,items,icon});

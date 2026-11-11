@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
-export const SIDEBAR_MIN = 180;
+// Reserve the native traffic lights, update dot and three window controls.
+export const SIDEBAR_MIN = 220;
 export const SIDEBAR_MAX = 320;
 export const clampSidebar = (width: number) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Number.isFinite(width) ? width : 220));
 

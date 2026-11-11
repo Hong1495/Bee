@@ -161,7 +161,15 @@ export default function App() {
   togglePlayback.current = music.toggle;
   const navigate = useCallback((nextPage:Page)=>visit({page:nextPage,playlist:'',albumId:'',query:'',spine:undefined}),[visit]);
   const menuUpdater = useRef(updater);
+  const menuUpdateRequested = useRef(false);
   menuUpdater.current = updater;
+  useEffect(() => {
+    if (!menuUpdateRequested.current || updater.phase === 'checking') return;
+    menuUpdateRequested.current = false;
+    if (updater.phase === 'error') setToast(updater.error || '检查更新失败，请重试');
+    else if (updater.update) { setToast(''); setUpdateOpen(true); }
+    else setToast('已是最新版本');
+  }, [updater.phase, updater.update, updater.error]);
   useEffect(() => {
     if (!isTauri()) return;
     let disposed = false;
@@ -169,12 +177,14 @@ export default function App() {
     void listen<string>('bee-menu-action', ({payload}) => {
       if (disposed) return;
       if (payload !== 'bee-settings' && payload !== 'bee-check-updates') return;
-      navigate('settings');
+      if (payload === 'bee-settings') navigate('settings');
       if (payload === 'bee-check-updates') {
         if (menuUpdater.current.update) setUpdateOpen(true);
-        else void menuUpdater.current.checkNow().then(() => {
-          if (!disposed) setUpdateOpen(true);
-        });
+        else {
+          menuUpdateRequested.current = true;
+          setToast('正在检查更新…');
+          void menuUpdater.current.checkNow();
+        }
       }
     }).then(stop => { if (disposed) stop(); else unlisten = stop; })
       .catch(error => setToast(`菜单连接失败：${String(error)}`));
@@ -251,6 +261,20 @@ export default function App() {
     .sort((a,b) => sort === 'title' ? a.title.localeCompare(b.title, 'zh-CN') : sort === 'year' ? Number(b.year)-Number(a.year) : b.added-a.added), [page, searchResults, sort]);
   const trackLookup = useMemo(() => new Map(albums.flatMap(record => record.tracks.map((song,index) => [song.id,{record,song,index}] as const))), [albums]);
   const playlistTracks = useMemo(() => playlistIds.flatMap(id => { const item = trackLookup.get(id); return item ? [item] : []; }).filter(item => !search || `${item.song.title} ${item.record.artist} ${item.record.title}`.toLowerCase().includes(search)), [playlistIds,trackLookup,search]);
+  const playlistSummary = useMemo(() => {
+    const artists = new Set<string>(), records = new Set<string>();
+    let seconds = 0;
+    for (const id of playlistIds) {
+      const item = trackLookup.get(id);
+      if (!item) continue;
+      artists.add(item.record.artist); records.add(item.record.id);
+      seconds += Number.isFinite(item.song.duration) ? Math.max(0,item.song.duration) : 0;
+    }
+    const names = [...artists].filter(Boolean);
+    const minutes = Math.ceil(seconds / 60);
+    const duration = minutes >= 60 ? `${Math.floor(minutes/60)} 小时${minutes%60 ? ` ${minutes%60} 分钟` : ''}` : `${minutes} 分钟`;
+    return {artists:names.slice(0,3).join('、')+(names.length>3?' 等':''), details:[`${playlistIds.length} 首歌曲`,`${records.size} 张专辑`,...(seconds>0?[duration]:[])].join(' · ')};
+  },[playlistIds,trackLookup]);
   const closeQueue = useCallback(() => setQueueOpen(false), []);
   const playlistCovers=usePlaylistCovers(music.source,music.playlists,albums,music.loadPlaylist,page==='playlists');
   const shownLists=useMemo(()=>playlistCovers.covers.filter(p=>!search||p.title.toLowerCase().includes(search)).sort((a,b)=>sort==='title'?a.title.localeCompare(b.title,'zh-CN'):0),[playlistCovers.covers,search,sort]);
@@ -298,10 +322,10 @@ export default function App() {
     {playlistDialog&&<PlaylistDialog state={playlistDialog} lists={customLists} onSave={saveListDialog} onClose={()=>setPlaylistDialog(null)}/>}
     {addingSongs&&activeList?.managed&&<PlaylistSongs albums={albums} existing={playlistIds} onClose={()=>setAddingSongs(false)} onSave={ids=>music.editPlaylist({operation:'add',id:playlist,trackIds:ids})}/>}
     <UpdateIndicator updater={updater} open={updateOpen} setOpen={setUpdateOpen}/>
+    <div className="window-navigation"><div className="history-navigation" role="group" aria-label="浏览导航"><button className="icon-button" aria-label="后退" title="后退（⌘[）" disabled={!history.current.canBack} onClick={()=>travelHistory(-1)}><ArrowLeft size={18}/></button><button className="icon-button" aria-label="前进" title="前进（⌘]）" disabled={!history.current.canForward} onClick={()=>travelHistory(1)}><ArrowRight size={18}/></button></div><IconButton label={sidebarOpen ? "隐藏侧栏" : "显示侧栏"} className="sidebar-toggle" onClick={() => setSidebarOpen(value=>!value)}><PanelLeft size={18}/></IconButton></div>
     <aside className="sidebar">
       <div className={`window-chrome ${isTauri() ? 'native' : ''}`} onMouseDown={dragWindow}>
         {!isTauri() && <span className="preview-traffic-lights"><i/><i/><i/></span>}
-        <IconButton label="隐藏侧栏" className="sidebar-toggle" onClick={() => setSidebarOpen(false)}><PanelLeft size={18}/></IconButton>
       </div>
       {['资料库', '播放'].map((group, index) => <section className="sidebar-group" key={group} aria-labelledby={`nav-group-${index}`}>
       <div className="nav-label" id={`nav-group-${index}`}>{group}</div>
@@ -313,7 +337,7 @@ export default function App() {
     {sidebarOpen && <SidebarDivider width={sidebarWidth} onChange={setSidebarWidth} onPreview={width => { if (isTauri()) queueContentBacking(theme === 'dark', width); }}/>}
     <main className="main">
       <header className="topbar" onMouseDown={dragWindow}>
-        <div className="toolbar-leading"><div className="history-navigation" role="group" aria-label="浏览导航"><button className="icon-button" aria-label="后退" title="后退（⌘[）" disabled={!history.current.canBack} onClick={()=>travelHistory(-1)}><ArrowLeft size={18}/></button><button className="icon-button" aria-label="前进" title="前进（⌘]）" disabled={!history.current.canForward} onClick={()=>travelHistory(1)}><ArrowRight size={18}/></button></div>{!sidebarOpen && <IconButton label="显示侧栏" onClick={() => setSidebarOpen(true)}><PanelLeft size={18}/></IconButton>}<span>{selected ? selected.title : pageTitle}</span></div>
+        <div className="toolbar-leading"><span>{selected ? selected.title : pageTitle}</span></div>
         <div className="top-actions">{music.connected&&music.listsReady&&page==='playlists'&&!selected&&<>
           <IconButton label="新建播放列表" onClick={()=>setPlaylistDialog({kind:'create'})}><Plus size={18}/></IconButton>
           {activeList?.managed&&<IconButton label="添加歌曲" onClick={()=>setAddingSongs(true)}><ListPlus size={18}/></IconButton>}
@@ -339,7 +363,7 @@ export default function App() {
           {view==='grid'?<AlbumGrid albums={shownLists} showYear={false} onOpen={openPlaylist} onPlay={item=>void music.playPlaylist(item.id)} renderArtwork={renderPlaylistArt}/>:shownLists.length>0&&<SpineBrowser albums={shownLists} onOpen={openPlaylist} initialScroll={spineScroll.current} onScrollPosition={saveSpineScroll} renderArtwork={renderPlaylistArt}/>}
           {!shownLists.length&&<EmptyScore label={query?'没有匹配的播放列表':'暂无播放列表'}/>}
         </div>}
-        {music.connected && page === 'playlists' && !!playlist && !selected && <section className={`playlist-content ${!playlistTracks.length ? 'playlist-empty' : ''}`}>{playlistTracks.length>0&&<><div className="playlist-detail-header">{playlistCovers.covers.find(p=>p.id===playlist)&&<PlaylistArtwork item={playlistCovers.covers.find(p=>p.id===playlist)!} className="playlist-detail-cover"/>}<div><p className="preference-value">{playlistIds.length} 首歌曲</p><div className="detail-actions"><button className="detail-icon-action" title="播放列表" aria-label="播放列表" disabled={playlistLoading || !playlistIds.length} onClick={() => void music.playPlaylist(playlist)}><Play size={18} fill="currentColor"/></button></div></div></div><div className="playlist-table"><div className="playlist-table-head"><span>#</span><span>歌曲</span><span>专辑</span><span>时长</span></div>{playlistTracks.map(({record,song,index},row) => <button className={`playlist-song ${record.id === currentId && trackIndex === index ? 'current' : ''}`} key={`${song.id}-${row}`} draggable={!!activeList?.managed&&!search} onDragStart={e=>{draggedSong.current=song.id;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',song.id);}} onDragEnd={()=>{draggedSong.current=null;document.querySelectorAll('[data-drop]').forEach(node=>node.removeAttribute('data-drop'));}} onDragOver={e=>{if(activeList?.managed&&!search&&draggedSong.current){e.preventDefault();e.dataTransfer.dropEffect='move';const r=e.currentTarget.getBoundingClientRect();e.currentTarget.dataset.drop=e.clientY>r.top+r.height/2?'after':'before';}}} onDragLeave={e=>{delete e.currentTarget.dataset.drop;}} onDrop={e=>{e.preventDefault();delete e.currentTarget.dataset.drop;const id=draggedSong.current;draggedSong.current=null;if(id&&id!==song.id){const r=e.currentTarget.getBoundingClientRect();const at=playlistIds.indexOf(song.id);applyPlaylistEdit({operation:'move',id:playlist,trackIds:[id],beforeId:e.clientY>r.top+r.height/2?playlistIds[at+1]:song.id});}}} onContextMenu={e=>{e.preventDefault();void trackMenu(e.clientX,e.clientY,()=>void music.playPlaylist(playlist,song.id),()=>void music.playTrack(record,index,true),songActions(song.id,true));}} onClick={() => music.playPlaylist(playlist,song.id)}><span className="song-number">{record.id === currentId && trackIndex === index && playing ? <span className="equalizer"><i/><i/><i/></span> : row+1}</span><span className="song-title"><Artwork album={record} alt=""/><span>{song.title}<small>{record.artist}</small></span></span><span className="song-album">{record.title}</span><span className="song-time">{time(song.duration)}</span></button>)}</div></>}{!playlistTracks.length && <EmptyScore label={playlistLoading ? '正在读取播放列表' : '暂无歌曲'}/>}</section>}
+        {music.connected && page === 'playlists' && !!playlist && !selected && <section className={`playlist-content ${!playlistTracks.length ? 'playlist-empty' : ''}`}>{playlistTracks.length>0&&<><div className="playlist-detail-header">{playlistCovers.covers.find(p=>p.id===playlist)&&<PlaylistArtwork item={playlistCovers.covers.find(p=>p.id===playlist)!} className="playlist-detail-cover"/>}<div className="playlist-detail-info"><p className="playlist-artists">{playlistSummary.artists}</p><p className="playlist-summary">{playlistSummary.details}</p><div className="detail-actions"><button className="detail-icon-action" title="播放列表" aria-label="播放列表" disabled={playlistLoading || !playlistIds.length} onClick={() => void music.playPlaylist(playlist)}><Play size={18} fill="currentColor"/></button></div></div></div><div className="playlist-table"><div className="playlist-table-head"><span>#</span><span>歌曲</span><span>专辑</span><span>时长</span></div>{playlistTracks.map(({record,song,index},row) => <button className={`playlist-song ${record.id === currentId && trackIndex === index ? 'current' : ''}`} key={`${song.id}-${row}`} draggable={!!activeList?.managed&&!search} onDragStart={e=>{draggedSong.current=song.id;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',song.id);}} onDragEnd={()=>{draggedSong.current=null;document.querySelectorAll('[data-drop]').forEach(node=>node.removeAttribute('data-drop'));}} onDragOver={e=>{if(activeList?.managed&&!search&&draggedSong.current){e.preventDefault();e.dataTransfer.dropEffect='move';const r=e.currentTarget.getBoundingClientRect();e.currentTarget.dataset.drop=e.clientY>r.top+r.height/2?'after':'before';}}} onDragLeave={e=>{delete e.currentTarget.dataset.drop;}} onDrop={e=>{e.preventDefault();delete e.currentTarget.dataset.drop;const id=draggedSong.current;draggedSong.current=null;if(id&&id!==song.id){const r=e.currentTarget.getBoundingClientRect();const at=playlistIds.indexOf(song.id);applyPlaylistEdit({operation:'move',id:playlist,trackIds:[id],beforeId:e.clientY>r.top+r.height/2?playlistIds[at+1]:song.id});}}} onContextMenu={e=>{e.preventDefault();void trackMenu(e.clientX,e.clientY,()=>void music.playPlaylist(playlist,song.id),()=>void music.playTrack(record,index,true),songActions(song.id,true));}} onClick={() => music.playPlaylist(playlist,song.id)}><span className="song-number">{record.id === currentId && trackIndex === index && playing ? <span className="equalizer"><i/><i/><i/></span> : row+1}</span><span className="song-title"><Artwork album={record} alt=""/><span>{song.title}<small>{record.artist}</small></span></span><span className="song-album">{record.title}</span><span className="song-time">{time(song.duration)}</span></button>)}</div></>}{!playlistTracks.length && <EmptyScore label={playlistLoading ? '正在读取播放列表' : '暂无歌曲'}/>}</section>}
 
       {selected && <section className="album-detail-page"><div className="album-detail-header" style={{ background: selected.color, color: selected.ink }}><div className="detail-record-art"><Vinyl album={selected}/><Artwork album={selected} alt={`${selected.title} 封面`}/></div><div><p>{selected.artist}</p><small>{selected.year} · {selected.genre} · {selected.tracks.length} 首歌曲</small><div className="detail-actions"><button className="detail-icon-action" title="播放专辑" aria-label="播放专辑" onClick={()=>startAlbum(selected)}><Play size={18} fill="currentColor" strokeWidth={1.5}/></button><button className="detail-icon-action" title="添加到播放列表" aria-label="添加到播放列表" disabled={!music.listsReady} onClick={e=>{const r=e.currentTarget.getBoundingClientRect();void actionMenu(r.left,r.bottom+4,addActions(selected.tracks.map(t=>t.id)));}}><ListPlus size={19}/></button></div></div></div><div className="track-list">{selected.tracks.map((item, index) => <button className={`track-row ${currentId === selected.id && trackIndex === index ? 'current' : ''}`} key={item.id} onContextMenu={e=>{e.preventDefault();void trackMenu(e.clientX,e.clientY,()=>void music.playTrack(selected,index),()=>void music.playTrack(selected,index,true),songActions(item.id));}} onClick={() => music.playTrack(selected, index)}><span className="track-number">{currentId === selected.id && trackIndex === index && playing ? <span className="equalizer"><i/><i/><i/></span> : String(index + 1).padStart(2, '0')}</span><span>{item.title}</span><span>{time(item.duration)}</span><Play size={13}/></button>)}</div></section>}
 
