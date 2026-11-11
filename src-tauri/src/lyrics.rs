@@ -76,9 +76,24 @@ fn score(song:&Song,title:&str,artists:&[String],album:&str,duration:f64)->Optio
 fn timed(text:&str)->bool {
  text.lines().filter(|line|line.starts_with('[')&&line.split(']').next().is_some_and(|tag|tag.contains(':')&&tag.chars().nth(1).is_some_and(|c|c.is_ascii_digit()))).take(2).count()>=2
 }
+fn instrumental_notice(text:&str)->bool {
+ let mut found=false;
+ for line in text.lines() {
+  let mut content=line.trim();
+  while content.starts_with('[') {if let Some(end)=content.find(']'){content=content[end+1..].trim();}else{break;}}
+  let key=normalized(content);
+  if key.is_empty(){continue;}
+  if !matches!(key.as_str(),"纯音乐"|"純音樂"|"纯音乐请欣赏"|"純音樂請欣賞"|"此歌曲为没有填词的纯音乐请您欣赏"|"此歌曲為沒有填詞的純音樂請您欣賞"|"instrumental"|"instrumentalonly") {return false;}
+  found=true;
+ }
+ found
+}
 fn result(synced:&str,plain:&str,source:&str,instrumental:bool)->Option<Value>{
+ let notice=instrumental_notice(&format!("{synced}\n{plain}"));
+ if notice{return Some(json!({"synced":"","plain":"","source":source,"instrumental":true}));}
  let synced=if timed(synced){synced}else{""};
  if synced.is_empty()&&plain.trim().is_empty()&&!instrumental{return None;}
+ let instrumental=instrumental&&synced.is_empty()&&plain.trim().is_empty();
  Some(json!({"synced":synced,"plain":plain,"source":source,"instrumental":instrumental}))
 }
 fn endpoint(base:&str,path:&str)->Result<Url,String>{
@@ -162,7 +177,7 @@ pub async fn lyrics_request(app:tauri::AppHandle,song:Song,refresh:Option<bool>)
  tauri::async_runtime::spawn_blocking(move||{
   if song.title.len()>4096||song.artist.len()>4096||song.album.len()>4096||!song.duration.is_finite(){return Err("歌曲信息无效".into());}
   let prefs=storage::preferences(&app);if !prefs.lyrics_enabled{return Ok(json!({"disabled":true}));}
-  let key=format!("{:x}",Sha256::digest(serde_json::to_vec(&(5,&song,&prefs.providers)).unwrap()));
+ let key=format!("{:x}",Sha256::digest(serde_json::to_vec(&(6,&song,&prefs.providers)).unwrap()));
   let path=storage::cache(&app)?.join("lyrics-v1").join(format!("{key}.json"));
   {let _gate=storage::CACHE_LOCK.lock().map_err(|_|"缓存不可用")?;
    if !refresh.unwrap_or(false){if let Ok(bytes)=std::fs::read(&path){if let Ok(value)=serde_json::from_slice::<Value>(&bytes){let ttl=if value["synced"].as_str().is_some_and(|s|!s.is_empty()){30*86400}else{3600};if std::fs::metadata(&path).ok().and_then(|m|m.modified().ok()).and_then(|t|t.elapsed().ok()).is_some_and(|age|age.as_secs()<ttl){return Ok(value);}}}}
@@ -184,6 +199,24 @@ pub async fn lyrics_request(app:tauri::AppHandle,song:Song,refresh:Option<bool>)
 #[cfg(test)]
 mod tests{
  use super::*;
+ #[test]fn instrumental_placeholders_are_not_lyrics(){
+  for text in ["[00:00.00]纯音乐，请欣赏", "[ar:久石让]\n[00:00.00]此歌曲为没有填词的纯音乐，请您欣赏\n[00:10.00]", "純音樂，請欣賞", "Instrumental"] {
+   let value=result(text,"","netease",false).unwrap();
+   assert_eq!(value["instrumental"],true);assert_eq!(value["synced"],"");assert_eq!(value["plain"],"");
+  }
+  assert_eq!(result("","纯音乐，请欣赏","lyricsovh",false).unwrap()["instrumental"],true);
+  assert!(result("","","netease",false).is_none());
+  assert_eq!(result("","","lrclib",true).unwrap()["instrumental"],true);
+ }
+ #[test]fn real_lyrics_override_instrumental_hints(){
+  let words="[00:00.00]Instrumental\n[00:10.00]This is a real sung line";
+  assert!(!instrumental_notice(words));
+  let value=result(words,"","lrclib",true).unwrap();
+  assert_eq!(value["instrumental"],false);assert_eq!(value["synced"],words);
+  for text in ["未找到歌词","No lyrics found","Totoro","Instrumental love","作曲：久石让"] {assert!(!instrumental_notice(text));}
+  assert!(!instrumental_notice("[ar:Artist]\n[00:00.00]\n[00:01.00]"));
+  assert!(!instrumental_notice("[00:00.00]纯音乐，请欣赏\n普通歌词"));
+ }
  #[test]fn numeric_title_compatibility_keeps_recording_identity(){
   let s=Song{title:"上海1943".into(),artist:"Jay Chou".into(),album:"范特西".into(),duration:195.812426};
   assert!(score(&s,"上海一九四三",&["周杰伦".into()],"范特西",196.0).is_some());

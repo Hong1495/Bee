@@ -55,6 +55,7 @@ export default function App() {
   const album = music.currentAlbum;
   const trackIndex = album?.tracks.findIndex(item => item.id === track?.id) ?? -1;
   const [preferencesRevision,setPreferencesRevision] = useState(0);
+  const [lyricsRefresh,setLyricsRefresh] = useState(0);
   const [loadedPlaylistIds, setPlaylistIds] = useState<string[]>([]);
   const [playlistLoading, setPlaylistLoading] = useState(false);
   const [themeMode, setTheme] = useState<'light' | 'dark' | 'system'>(() => read('bee-theme', 'light'));
@@ -367,7 +368,7 @@ export default function App() {
 
       {selected && <section className="album-detail-page"><div className="album-detail-header" style={{ background: selected.color, color: selected.ink }}><div className="detail-record-art"><Vinyl album={selected}/><Artwork album={selected} alt={`${selected.title} 封面`}/></div><div><p>{selected.artist}</p><small>{selected.year} · {selected.genre} · {selected.tracks.length} 首歌曲</small><div className="detail-actions"><button className="detail-icon-action" title="播放专辑" aria-label="播放专辑" onClick={()=>startAlbum(selected)}><Play size={18} fill="currentColor" strokeWidth={1.5}/></button><button className="detail-icon-action" title="添加到播放列表" aria-label="添加到播放列表" disabled={!music.listsReady} onClick={e=>{const r=e.currentTarget.getBoundingClientRect();void actionMenu(r.left,r.bottom+4,addActions(selected.tracks.map(t=>t.id)));}}><ListPlus size={19}/></button></div></div></div><div className="track-list">{selected.tracks.map((item, index) => <button className={`track-row ${currentId === selected.id && trackIndex === index ? 'current' : ''}`} key={item.id} onContextMenu={e=>{e.preventDefault();void trackMenu(e.clientX,e.clientY,()=>void music.playTrack(selected,index),()=>void music.playTrack(selected,index,true),songActions(item.id));}} onClick={() => music.playTrack(selected, index)}><span className="track-number">{currentId === selected.id && trackIndex === index && playing ? <span className="equalizer"><i/><i/><i/></span> : String(index + 1).padStart(2, '0')}</span><span>{item.title}</span><span>{time(item.duration)}</span><Play size={13}/></button>)}</div></section>}
 
-        {music.connected && page === 'playing' && !selected && album && track && <section className="minimal-player" aria-label={track.title}>
+        {music.connected && page === 'playing' && !selected && album && track && <section className="minimal-player" aria-label={track.title} onContextMenu={e=>{e.preventDefault();void actionMenu(e.clientX,e.clientY,[{text:'重新查找歌词',icon:'refresh',action:()=>setLyricsRefresh(value=>value+1)}]);}}>
           <div className="listening-stack">
           <div className="record-stage minimal-deck">
             <button type="button" className="stage-disc" aria-label={playing ? '点击唱片暂停' : '点击唱片播放'} aria-pressed={playing} title={playing ? '点击暂停' : '点击播放'} onClick={() => void togglePlayback.current()}>
@@ -377,7 +378,7 @@ export default function App() {
             <Tonearm playing={playing} trackId={track.id} position={music.position} onToggle={music.toggle}/>
           </div>
           <div className="listening-footer">
-          <Lyrics track={track} position={music.position} revision={preferencesRevision}/>
+          <Lyrics key={track.id} track={track} position={music.position} revision={preferencesRevision} refreshToken={lyricsRefresh}/>
           <div className="floating-transport" role="group" aria-label="播放控制" aria-busy={music.transportBusy}>
             <button type="button" aria-label="上一首" disabled={!music.canPrevious} title={music.canPrevious ? '上一首' : '没有上一首'} onClick={() => void music.skip('previous')}><SkipBack size={18} fill="currentColor"/></button>
             <button type="button" className="transport-primary" aria-label={playing ? '暂停' : '播放'} title={playing ? '暂停' : '播放'} onClick={() => void music.toggle()}>{playing ? <Pause size={21} fill="currentColor"/> : <Play size={21} fill="currentColor"/>}</button>

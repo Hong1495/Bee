@@ -1,6 +1,7 @@
 import {Image} from '@tauri-apps/api/image';
-export type MenuSymbol='play'|'play-one'|'add'|'playlist'|'rename'|'delete'|'remove'|'up'|'down';
+export type MenuSymbol='play'|'play-one'|'add'|'playlist'|'rename'|'delete'|'remove'|'up'|'down'|'refresh';
 const paths:Record<MenuSymbol,string[]>={
+ refresh:['M13 6A5 5 0 1 0 13 10','M13 2V6H9'],
  play:['M5 3 13 8 5 13Z'],
  'play-one':['M4 3 12 8 4 13Z','M14 4V12'],
  add:['M3 4H9M3 8H8M3 12H8','M12 7V13M9 10H15'],

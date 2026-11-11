@@ -4,10 +4,11 @@ import type { MusicTrack } from './data';
 import type { PlaybackPosition } from './useMusic';
 import { parseLrc,lyricIndex } from './parseLyrics';
 type Result={synced:string;plain:string;source:string;instrumental:boolean;disabled?:boolean};
-export const Lyrics = memo(function Lyrics({track,position,revision}:{track:MusicTrack;position:RefObject<PlaybackPosition>;revision:number}){
- const [retry,setRetry]=useState(0);const [status,setStatus]=useState<'loading'|'missing'|'error'|'ready'>('loading');
+export const Lyrics = memo(function Lyrics({track,position,revision,refreshToken}:{track:MusicTrack;position:RefObject<PlaybackPosition>;revision:number;refreshToken:number}){
+ const consumedRefresh=useRef(refreshToken);
+ const [status,setStatus]=useState<'loading'|'missing'|'error'|'ready'>('loading');
  const [result,setResult]=useState<Result|null>(null);const [index,setIndex]=useState(-1);const [expanded,setExpanded]=useState(false);
- useEffect(()=>{let cancelled=false;setResult(null);setStatus('loading');setIndex(-1);setExpanded(false);if(isTauri())void invoke<Result|null>('lyrics_request',{refresh:retry>0,song:{title:track.title,artist:track.artist,album:track.album,duration:track.duration}}).then(value=>{if(!cancelled){setResult(value);setStatus(value?'ready':'missing');}}).catch(()=>{if(!cancelled)setStatus('error');});return()=>{cancelled=true;};},[track.id,track.title,track.artist,track.album,track.duration,revision,retry]);
+ useEffect(()=>{let cancelled=false;const refresh=consumedRefresh.current!==refreshToken;consumedRefresh.current=refreshToken;setResult(null);setStatus('loading');setIndex(-1);setExpanded(false);if(isTauri())void invoke<Result|null>('lyrics_request',{refresh,song:{title:track.title,artist:track.artist,album:track.album,duration:track.duration}}).then(value=>{if(!cancelled){setResult(value);setStatus(value?'ready':'missing');}}).catch(()=>{if(!cancelled)setStatus('error');});return()=>{cancelled=true;};},[track.id,track.title,track.artist,track.album,track.duration,revision,refreshToken]);
  const rail=useRef<HTMLDivElement>(null);
  const [offset,setOffset]=useState(0);
  const lines=useMemo(()=>parseLrc(result?.synced??''),[result]);
@@ -21,9 +22,7 @@ export const Lyrics = memo(function Lyrics({track,position,revision}:{track:Musi
   measure();const observer=new ResizeObserver(measure);observer.observe(node);
   return()=>observer.disconnect();
  },[lines,index]);
- if(status==='loading')return <div className="lyrics-plain"><span className="text-button" role="status">正在查找歌词…</span></div>;
- if(status==='error'||status==='missing')return <div className="lyrics-plain"><button className="text-button" onClick={()=>setRetry(v=>v+1)}>{status==='error'?'歌词暂不可用':'未找到歌词'} · 重试</button></div>;
- if(!result||result.disabled||result.instrumental)return <div className="lyrics-space" aria-hidden="true"/>;
+ if(status!=='ready'||!result||result.disabled||result.instrumental)return <div className="lyrics-space" aria-hidden="true"/>;
  if(!lines.length)return <div className="lyrics-plain"><button className="text-button" onClick={()=>setExpanded(v=>!v)} aria-expanded={expanded}>歌词 · 无时间轴</button>{expanded&&<div className="plain-lyrics" tabIndex={0}>{result.plain}</div>}</div>;
  return <div className="synced-lyrics" aria-label="同步歌词"><div ref={rail} className="lyrics-track" style={{transform:`translateY(${offset}px)`}}>{lines.map((line,i)=><p key={`${line.time}-${i}`} className={i===index?'lyric-current':''} style={{opacity:i===index?1:Math.abs(i-index)===1?.48:0}}><span>{line.text||'♪'}</span></p>)}</div></div>;
 });

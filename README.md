@@ -91,7 +91,7 @@ Bee 连接 Mac 上的“音乐”App，也能直接播放你收藏的本地音�
 - 本地播放使用 Rust **rodio / Symphonia**；Music 集成使用 **Apple Events / JXA**，控制本机“音乐”App。
 - Bee 按来源快照管理队列：专辑／列表从头播放，点曲目从选中位置继续，右键可仅播放一首。不复现 Music 的私有队列及随机／循环行为，目前不支持无缝播放。在 Music 中另选歌曲会退出 Bee 原有队列。
 - Music 资料库读取和状态回报速度取决于库规模与 Music 响应；本地格式支持取决于文件的实际编码。
-- [LRCLIB](https://lrclib.net/docs) 精确查找失败后会搜索候选；网易云使用非官方 Web 接口，覆盖率与长期可用性不作保证。[lyrics.ovh](https://github.com/NTag/lyrics.ovh#api) 仅补充纯文本。未找到或网络失败时可在播放页重试。
+- [LRCLIB](https://lrclib.net/docs) 精确查找失败后会搜索候选；网易云使用非官方 Web 接口，覆盖率与长期可用性不作保证。[lyrics.ovh](https://github.com/NTag/lyrics.ovh#api) 仅补充纯文本。纯音乐及未匹配到歌词时保持留白；未找到或网络失败时，可在播放页右键选择“重新查找歌词”。
 - 封面缓存有效期为 30 天。2048 像素以内的 JPEG / PNG 保留源文件，更大图片采用高质量缩放缓存。
 - 系统图标使用 Icon Composer 资源，默认白底；暗色与透明图标由支持相应外观的 macOS 管理。图标主体经 AI 辅助生成。
 
