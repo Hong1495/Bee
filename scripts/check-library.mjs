@@ -16,7 +16,7 @@ const musicTracks=[song('0000000000000001'),song('0000000000000002'),song('00000
 const localTracks=[song('local:1','local'),song('local:2','local')];
 let musicStatus={running:true,playing:false,track:null,position:0},localStatus={playing:true,ended:false,position:0};
 const React={useState(initial){const i=cursor++;slots[i]??={value:typeof initial==='function'?initial():initial};return [slots[i].value,v=>{slots[i].value=typeof v==='function'?v(slots[i].value):v;}];},useRef(initial){const i=cursor++;slots[i]??={current:initial};return slots[i];},useMemo(fn){cursor++;return fn();},useCallback(fn){cursor++;return fn;},useEffect(fn){cursor++;effects.push(fn);}};
-const invoke=async(command,args)=>{calls.push({command,...args});if(command==='local_request'){if(['scan','add','remove'].includes(args.operation))return {tracks:localTracks,playlists:[{id:'folder:1',name:'Folder',source:'local',trackIds:localTracks.map(t=>t.id)}],folders:[{id:'folder:1',name:'Folder',path:'/fixture'}],warnings:[]};if(args.operation==='status')return localStatus;return {};}
+const invoke=async(command,args)=>{calls.push({command,...args});if(command==='local_request'){if(['scan','add','remove'].includes(args.operation))return {tracks:localTracks,playlists:[],folders:[{id:'folder:1',name:'Folder',path:'/fixture'}],warnings:[]};if(args.operation==='status')return localStatus;return {};}
  if(args.operation==='library')return {tracks:musicTracks,playlists:[{id:'playlist',name:'List'}]};if(args.operation==='playlist')return musicTracks.map(t=>t.id).reverse();if(args.operation==='status')return musicStatus;return {};};
 const data=load('src/data.ts');
 const session=load('src/playbackSession.ts');
@@ -27,7 +27,7 @@ await result.playTrack(result.albums[0],1);render();assert.equal(result.queue.tr
 await result.skip('next');render();assert.equal(result.queue.index,2);assert.equal(result.canNext,false);
 await result.playTrack(result.albums[0],1,true);render();assert.equal(result.queue.tracks.length,1);assert.equal(result.canNext,false);
 await result.playPlaylist('playlist',musicTracks[1].id);render();assert.equal(result.queue.tracks[0].id,musicTracks[2].id);assert.equal(result.queue.index,1);
-await result.selectLibrary('local');render();assert.equal(result.source,'local');assert.equal(result.track,null);assert.equal(result.queue.tracks.length,0);assert.equal(result.musicConnected,false);assert.equal(result.albums[0].tracks.length,2);assert.ok(result.albums[0].tracks.every(t=>t.id.startsWith('local:')));
+await result.selectLibrary('local');render();assert.equal(result.source,'local');assert.equal(result.playlists.length,0);assert.equal(result.track,null);assert.equal(result.queue.tracks.length,0);assert.equal(result.musicConnected,false);assert.equal(result.albums[0].tracks.length,2);assert.ok(result.albums[0].tracks.every(t=>t.id.startsWith('local:')));
 await result.playAlbum(result.albums[0]);render();assert.equal(result.track.id,'local:1');
 localStatus={playing:false,ended:true,position:100};
 const cleanup=effects.at(-1)();await new Promise(r=>setTimeout(r,10));cleanup();render();assert.equal(result.track.id,'local:2');assert.equal(result.queue.index,1);

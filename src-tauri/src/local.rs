@@ -126,10 +126,10 @@ fn save(app: &tauri::AppHandle, list: &[Folder]) -> Result<(), String> {
 }
 fn scan(state: &LocalMedia, list: Vec<Folder>) -> Result<Value, String> {
     let mut tracks = HashMap::new();
-    let mut playlists = vec![];
+    // Source folders are library inputs, not user-created playlists.
+    let playlists: Vec<Value> = vec![];
     let mut warnings = vec![];
     for folder in &list {
-        let mut ids = vec![];
         let root = Path::new(&folder.path);
         if !root.is_dir() {
             warnings.push(format!("{}：目录不可用", folder.name));
@@ -163,10 +163,8 @@ fn scan(state: &LocalMedia, list: Vec<Folder>) -> Result<Value, String> {
             let id = format!("local:{}", hash(&path.to_string_lossy()));
             let props = file.properties();
             let row = json!({"id":id,"source":"local","title":tag.and_then(|t|t.title()).map(|v|v.into_owned()).unwrap_or_else(||path.file_stem().unwrap_or_default().to_string_lossy().into_owned()),"artist":tag.and_then(|t|t.artist()).map(|v|v.into_owned()).unwrap_or_else(||"未知艺术家".into()),"albumArtist":"","album":tag.and_then(|t|t.album()).map(|v|v.into_owned()).unwrap_or_else(||path.parent().and_then(|p|p.file_name()).unwrap_or_default().to_string_lossy().into_owned()),"duration":props.duration().as_secs_f64(),"year":tag.and_then(|t|t.year()).unwrap_or(0),"genre":tag.and_then(|t|t.genre()).map(|v|v.into_owned()).unwrap_or_default(),"disc":tag.and_then(|t|t.disk()).unwrap_or(1),"number":tag.and_then(|t|t.track()).unwrap_or(0),"added":0});
-            ids.push(id.clone());
             tracks.entry(id).or_insert(LocalTrack { path, row });
         }
-        playlists.push(json!({"id":folder.id,"name":folder.name,"source":"local","trackIds":ids}));
     }
     let mut rows: Vec<_> = tracks.values().map(|t| t.row.clone()).collect();
     rows.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
@@ -370,10 +368,8 @@ mod tests {
         assert_eq!(result["tracks"][0]["source"], "local");
         assert_eq!(result["tracks"][0]["title"], "01 Test");
         assert!(result["tracks"][0]["duration"].as_f64().unwrap() > 0.0);
-        assert_eq!(
-            result["playlists"][0]["trackIds"].as_array().unwrap().len(),
-            1
-        );
+        assert!(result["playlists"].as_array().unwrap().is_empty());
+        assert_eq!(result["folders"].as_array().unwrap().len(), 2);
         assert!(!result["warnings"].as_array().unwrap().is_empty());
         let mut decoder = rodio::Decoder::try_from(std::fs::File::open(&audio).unwrap()).unwrap();
         use rodio::Source;

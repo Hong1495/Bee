@@ -69,3 +69,11 @@ assert.equal(fullQueue.tracks[60].current,true);
 const onlySong = JSON.parse(context.run([JSON.stringify({operation:'queue',context:{ids:[queueIds[60]],name:'Single',playlistId:null}})]));
 assert.equal(onlySong.tracks.length,1);
 console.log('PASS: album vs single intent, playlist first-track semantics, complete 125-track queue and current-row position');
+// Classify by Music's specialKind, never its localized/user-editable name.
+const listKinds=['Music','Library','folder','Purchased Music','Genius','none','none'];
+const listNames=['音乐','所有音乐','文件夹','已购音乐','Genius','Music','我的收藏'];
+const emptyTracks=Object.fromEntries(['persistentID','name','artist','albumArtist','album','duration','year','genre','discNumber','trackNumber','dateAdded'].map(key=>[key,()=>[]]));
+context.Application=()=>({libraryPlaylists:[{tracks:emptyTracks}],userPlaylists:{persistentID:()=>listKinds.map((_,i)=>String(i)),name:()=>listNames,specialKind:()=>listKinds}});
+const customLists=JSON.parse(context.run([JSON.stringify({operation:'library'})])).playlists;
+assert.deepEqual(customLists.map(p=>p.name),['Music','我的收藏']);
+console.log('PASS: system music/library/purchased/folder/Genius lists hidden; custom lists including one named Music preserved');

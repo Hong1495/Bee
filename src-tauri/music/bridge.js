@@ -44,7 +44,7 @@ function run(argv) {
       added:added[i] ? new Date(added[i]).getTime() : 0}));
     const lists = music.userPlaylists;
     const listIds = lists.persistentID(), listNames = lists.name(), kinds = lists.specialKind();
-    return JSON.stringify({ tracks:rows, playlists:listIds.map((id,i) => ({id, name:listNames[i], kind:String(kinds[i])})).filter(p => p.kind !== 'folder') });
+    return JSON.stringify({ tracks:rows, playlists:listIds.map((id,i) => ({id, name:listNames[i], kind:String(kinds[i])})).filter(p => p.kind.toLowerCase() === 'none') });
   }
   if (request.operation === 'playlist') {
     const list = music.userPlaylists.whose({persistentID:request.id})();
