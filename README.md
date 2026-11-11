@@ -20,6 +20,12 @@
 - 原生 Icon Composer 图标资源：默认白底，暗色与透明外观由支持这些样式的 macOS 管理。
 - 圆 b（B♭）悬停提示音、方 B（B♮）封脊换格提示音，可在设置关闭。
 
+## 下载与更新
+
+首个 Apple Silicon 安装包见 [GitHub Releases](https://github.com/Hong1495/Bee/releases/latest)。将 Bee.app 拖入“应用程序”后运行。设置中可关闭自动检查更新，或手动检查；检测到新版时红绿灯右侧显示橙色下载按钮。下载、校验、安装后由用户确认重启。
+
+更新包使用独立签名校验，首版尚无 Apple Developer ID 签名与公证。后续发布方法见 [发布说明](docs/releases.md)。
+
 ## 开发
 
 需要 macOS、Node.js 22+、Rust stable 和 Xcode Command Line Tools。Music 集成与原生窗口功能需要在 macOS 应用内运行。

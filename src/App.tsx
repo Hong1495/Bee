@@ -16,6 +16,8 @@ import { useAlbumTransition } from './useAlbumTransition';
 import { useMusic } from './useMusic';
 import { Tonearm } from './Tonearm';
 import { PlaybackQueue } from './PlaybackQueue';
+import { useUpdater } from './useUpdater';
+import { UpdateIndicator,UpdateSettings } from './UpdateUI';
 import { MediaSettings } from './MediaSettings';
 import { Lyrics } from './Lyrics';
 import { trackMenu } from './trackMenu';
@@ -29,6 +31,8 @@ const IconButton = ({ label, children, onClick, active = false, className = '' }
 
 
 export default function App() {
+  const updater=useUpdater();
+  const [updateOpen,setUpdateOpen]=useState(false);
   const [uiSounds, setUISounds] = useState(() => read('bee-ui-sounds', true));
   useEffect(() => installUISounds(), []);
   useEffect(() => { setUISoundsEnabled(uiSounds); localStorage.setItem('bee-ui-sounds', JSON.stringify(uiSounds)); }, [uiSounds]);
@@ -190,6 +194,7 @@ export default function App() {
   ];
 
   return <div style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties} className={`app native-redesign ${visible ? '' : 'app-hidden'} ${sidebarOpen ? '' : 'sidebar-collapsed'} ${page === 'artists' || page === 'playlists' ? 'three-column' : ''}`}>
+    <UpdateIndicator updater={updater} open={updateOpen} setOpen={setUpdateOpen}/>
     <aside className="sidebar">
       <div className={`window-chrome ${isTauri() ? 'native' : ''}`} onMouseDown={dragWindow}>
         {!isTauri() && <span className="preview-traffic-lights"><i/><i/><i/></span>}
@@ -265,8 +270,9 @@ export default function App() {
             <h2 id="interaction-heading">交互</h2>
             <div className="preferences-group"><div className="preference-row"><span id="ui-sound-label">浏览提示音</span><button type="button" className="sound-switch" role="switch" aria-checked={uiSounds} aria-labelledby="ui-sound-label" onClick={() => setUISounds(value => !value)}><span/></button></div></div>
           </section>
+          <UpdateSettings updater={updater} onOpen={()=>setUpdateOpen(true)}/>
           <MediaSettings music={music} onPreferencesChanged={()=>setPreferencesRevision(value=>value+1)}/>
-          <footer className="preferences-about"><img src={iconPath} alt=""/><span>Bee<small>版本 0.1.0</small></span></footer>
+          <footer className="preferences-about"><img src={iconPath} alt=""/><span>Bee<small>版本 {updater.version}</small></span></footer>
         </div>}
       </div>
       </div>

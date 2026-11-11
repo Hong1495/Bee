@@ -20,3 +20,6 @@ src-tauri/gen/
 # Keep the compiled system catalog for builds without Icon Composer.
 src-tauri/icons/compiled/*
 !src-tauri/icons/compiled/Assets.car
+
+# Local signed release artifacts (uploaded separately to GitHub Releases)
+release/

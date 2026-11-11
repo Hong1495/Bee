@@ -47,7 +47,7 @@ export function useMusic() {
   const song=restored.queue.tracks[restored.queue.index];awaitingResume.current=!!song;
   publish({running:false,playing:false,track:song??null},restored.seconds);
  },[replaceQueue,publish,persist]);
- useEffect(()=>{const save=()=>persist(true);window.addEventListener('pagehide',save);document.addEventListener('visibilitychange',save);return()=>{save();window.removeEventListener('pagehide',save);document.removeEventListener('visibilitychange',save);};},[persist]);
+ useEffect(()=>{const save=()=>persist(true);window.addEventListener('bee-before-update',save);window.addEventListener('pagehide',save);document.addEventListener('visibilitychange',save);return()=>{save();window.removeEventListener('bee-before-update',save);window.removeEventListener('pagehide',save);document.removeEventListener('visibilitychange',save);};},[persist]);
  const tracks=useMemo(()=>source==='music'?library.tracks:localLibrary.tracks,[source,library,localLibrary]);
  const lookup=useMemo(()=>new Map(tracks.map(t=>[t.id,t])),[tracks]);
  const playlists=useMemo(()=>source==='music'?library.playlists:localLibrary.playlists,[source,library,localLibrary]);

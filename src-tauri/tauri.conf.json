@@ -43,7 +43,8 @@
   "bundle": {
     "active": true,
     "targets": [
-      "app"
+      "app",
+      "dmg"
     ],
     "icon": [
       "icons/icon.icns",
@@ -55,6 +56,15 @@
     },
     "resources": {
       "icons/compiled/Assets.car": "Assets.car"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIwRDU1OTFBQUZDMzU0MkQKUldRdFZNT3ZHbG5Wc0VHNXFIdFJPRXJzd0p5N1o0Sjl3V0VYclMvOXA4bXZ4d3JJdjQ1d1hyeUEK",
+      "endpoints": [
+        "https://github.com/Hong1495/Bee/releases/latest/download/latest.json"
+      ]
     }
   }
 }
