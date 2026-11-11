@@ -5,6 +5,7 @@ mod lyrics;
 mod music;
 mod storage;
 mod restart;
+mod playlists;
 
 #[derive(Debug, PartialEq)]
 enum ReopenAction {
@@ -146,6 +147,16 @@ fn main() {
                 use objc2_app_kit::{NSToolbar, NSWindow, NSWindowToolbarStyle};
                 use objc2_foundation::NSString;
                 use tauri::Manager;
+                use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+                let menu = Menu::default(app.handle())?;
+                if let Some(tauri::menu::MenuItemKind::Submenu(bee)) = menu.items()?.first() {
+                    bee.insert_items(&[
+                        &MenuItem::with_id(app, "bee-settings", "设置…", true, Some("CmdOrCtrl+,"))?,
+                        &MenuItem::with_id(app, "bee-check-updates", "检查更新…", true, None::<&str>)?,
+                        &PredefinedMenuItem::separator(app)?,
+                    ], 2)?;
+                }
+                app.set_menu(menu)?;
                 if let Some(window) = app.get_webview_window("main") {
                     let ptr = window.ns_window()?;
                     // AppKit owns titlebar geometry throughout live resize and
@@ -168,6 +179,21 @@ fn main() {
             }
             Ok(())
         })
+        .on_menu_event(|app, event| {
+            use tauri::{Emitter, Manager};
+            let action = event.id().as_ref();
+            if !matches!(action, "bee-settings" | "bee-check-updates") { return; }
+            if let Some(window) = app.get_webview_window("main") {
+                // Restore through AppKit so the user's Dock animation is kept.
+                #[cfg(target_os = "macos")]
+                if let Ok(ptr) = window.ns_window() {
+                    let native = unsafe { &*(ptr as *const objc2_app_kit::NSWindow) };
+                    if native.isMiniaturized() { native.deminiaturize(None); }
+                    else { native.makeKeyAndOrderFront(None); }
+                }
+                let _ = window.emit("bee-menu-action", action);
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             set_content_backing,
             titlebar_double_click,
@@ -177,6 +203,7 @@ fn main() {
             music::music_seek,
             local::local_request,
             storage::storage_request,
+            playlists::playlist_request,
             lyrics::lyrics_request
         ])
         .on_window_event(|window, event| {

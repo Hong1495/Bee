@@ -11,15 +11,19 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
   const suppressClick = useRef(false);
   const hoverMutedUntil = useRef(0);
   const albumKey = useMemo(()=>albums.map(album => album.id).join('|'),[albums]);
+  const previousCollection = useRef(albumKey);
 
   const saveScroll = useRef(onScrollPosition);
   saveScroll.current = onScrollPosition;
 
   useLayoutEffect(() => {
+    const restorePosition = previousCollection.current === albumKey;
+    previousCollection.current = albumKey;
     caption.current?.show(null);
     const root = viewport.current;
     if (!root) return;
     const items = [...root.querySelectorAll<HTMLElement>('.crate-item')];
+    const stack = root.querySelector<HTMLElement>('.crate-stack')!;
     const reduced = matchMedia('(prefers-reduced-motion: reduce)');
     let centers: number[] = [];
     let width = 0, max = 0, target = root.scrollLeft;
@@ -81,16 +85,23 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
     const settle = () => move(nearestSlot(root.scrollLeft));
     travel.current = position => { soundUntil = performance.now() + 1600; move(position); };
     const measure = () => {
+      clearTimeout(settleTimer);
       soundUntil = 0; lastSoundSlot = -1;
       const anchor = focusPosition;
       width = root.clientWidth;
+      // Resolve against the viewport, not the intrinsic width of the flex row.
+      // Symmetric end space lets both ends reach the centre without pushing
+      // short collections to the right.
+      const padding = Math.max(0, (width - 112) / 2);
+      stack.style.paddingInline = `${padding}px`;
+      stack.style.width = `${Math.max(width, items.length * 112 + padding * 2)}px`;
       max = Math.max(0, root.scrollWidth - width);
       // Sleeves use one fixed flex-basis. Read layout for two slots, then derive
       // the rest instead of asking WebKit for every album on every resize.
       const firstCenter = items[0] ? items[0].offsetLeft + items[0].offsetWidth/2 : 0;
       const stride = items[1] ? items[1].offsetLeft + items[1].offsetWidth/2 - firstCenter : 112;
       centers = items.map((_,index)=>firstCenter+index*stride);
-      if (!measured) { const anchorIndex = albums.findIndex(album => album.id === initialAlbumId); root.scrollLeft = initialScroll ?? (anchorIndex >= 0 ? clamp(centers[anchorIndex] - width/2) : nearestSlot(max / 2)); measured = true; }
+      if (!measured) { const anchorIndex = restorePosition ? albums.findIndex(album => album.id === initialAlbumId) : -1; root.scrollLeft = clamp((restorePosition ? initialScroll : undefined) ?? (anchorIndex >= 0 ? centers[anchorIndex] - width/2 : max / 2)); measured = true; }
       else {
         const spacing = centers.length > 1 ? centers[1] - centers[0] : 112;
         root.scrollLeft = clamp((centers[0] ?? 0) + anchor * spacing - width / 2);
@@ -162,6 +173,9 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
     const onScroll = () => {
       hoverMutedUntil.current = performance.now() + 180;
       saveScroll.current?.(root.scrollLeft); schedule();
+      // Layout/restoration already chose its position. Only user scrolling
+      // should snap; otherwise an even-sized centred collection shifts again.
+      if (Math.abs(root.scrollLeft - target) < .5) return;
       if (!animating && !drag) { clearTimeout(settleTimer); settleTimer = setTimeout(settle, 140); }
     };
     root.addEventListener('scroll', onScroll, { passive: true });

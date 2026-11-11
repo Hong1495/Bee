@@ -1,7 +1,7 @@
 export type Track = { id: string; title: string; duration: number; artist: string; disc: number; number: number };
 export type Album = { id: string; title: string; artist: string; year: string; genre: string; color: string; ink: string; artwork: string; added: number; tracks: Track[] };
 export type MusicTrack = { source?: 'local' | 'music'; id: string; title: string; duration: number; artist: string; albumArtist: string; album: string; year: number; genre: string; disc: number; number: number; added: number };
-export type MusicPlaylist = { id: string; name: string; source?: 'local' | 'music'; trackIds?:string[] };
+export type MusicPlaylist = { id: string; name: string; source?: 'local' | 'music'; trackIds?:string[]; managed?:boolean };
 export const albumKey = (track: MusicTrack) => JSON.stringify([track.source || 'music', track.album || '未知专辑', track.albumArtist || track.artist || '未知艺术家']);
 export function groupAlbums(tracks: MusicTrack[]): Album[] {
   const grouped = new Map<string, Album>();

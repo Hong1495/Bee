@@ -8,7 +8,7 @@ export type UpdatePhase='idle'|'checking'|'available'|'downloading'|'installing'
 const preference='bee-auto-update';
 export function useUpdater(){
  const [automatic,setAutomatic]=useState(()=>localStorage.getItem(preference)!=='false');
- const [version,setVersion]=useState('0.1.5');
+ const [version,setVersion]=useState('0.1.6');
  const [update,setUpdate]=useState<Update|null>(null);
  const [phase,setPhase]=useState<UpdatePhase>('idle');
  const [error,setError]=useState('');const [checked,setChecked]=useState(false);

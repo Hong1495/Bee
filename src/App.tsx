@@ -3,9 +3,10 @@ import { installUISounds, setUISoundsEnabled } from './uiSounds';
 import { EmptyScore } from './EmptyScore';
 import { Artwork } from './Artwork';
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
-import { Grid2X2, Columns3, Headphones, Users, ListMusic, PanelLeft, ArrowLeft, Disc3, Monitor, Moon, Play, Pause, SkipBack, SkipForward, Settings2, Sun } from 'lucide-react';
+import { Grid2X2, Columns3, Headphones, Users, ListMusic, PanelLeft, ArrowLeft, Disc3, Monitor, Moon, Play, Pause, SkipBack, SkipForward, Settings2, Sun, Plus, MoreHorizontal, ListPlus } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { time, type Album } from './data';
 import { buildLibrarySearchIndex, matchLibrary, selectSearchArtist } from './librarySearch';
 import { SpineBrowser } from './SpineBrowser';
@@ -20,7 +21,10 @@ import { useUpdater } from './useUpdater';
 import { UpdateIndicator,UpdateSettings } from './UpdateUI';
 import { MediaSettings } from './MediaSettings';
 import { Lyrics } from './Lyrics';
-import { trackMenu } from './trackMenu';
+import { trackMenu, actionMenu, type MenuAction } from './trackMenu';
+import { PlaylistDialog, type PlaylistDialogState } from './PlaylistDialog';
+import { PlaylistSongs } from './PlaylistSongs';
+import type { PlaylistEdit } from './useMusic';
 import { queueContentBacking } from './windowBacking';
 import { ToolbarSearch } from './ToolbarSearch';
 import { SortMenu } from './SortMenu';
@@ -40,11 +44,11 @@ export default function App() {
   const [selected, setSelected] = useState<Album | null>(null);
   const music = useMusic();
   const { albums, currentId, playing, track } = music;
-  useEffect(()=>{setSelected(null);setQuery('');},[music.source]);
+  useEffect(()=>{setSelected(null);setQuery('');setPlaylistDialog(null);setAddingSongs(false);},[music.source]);
   const album = music.currentAlbum;
   const trackIndex = album?.tracks.findIndex(item => item.id === track?.id) ?? -1;
   const [preferencesRevision,setPreferencesRevision] = useState(0);
-  const [playlistIds, setPlaylistIds] = useState<string[]>([]);
+  const [loadedPlaylistIds, setPlaylistIds] = useState<string[]>([]);
   const [playlistLoading, setPlaylistLoading] = useState(false);
   const [themeMode, setTheme] = useState<'light' | 'dark' | 'system'>(() => read('bee-theme', 'light'));
   const [systemDark, setSystemDark] = useState(matchMedia('(prefers-color-scheme: dark)').matches);
@@ -53,6 +57,11 @@ export default function App() {
   const artists = useMemo(() => [...new Set(albums.map(item => item.artist))].sort((a, b) => a.localeCompare(b)), [albums]);
   const [artist, setArtist] = useState('');
   const [playlist, setPlaylist] = useState('');
+  const selectedCustomList=music.playlists.find(item=>item.id===playlist&&item.managed);
+  const playlistIds=selectedCustomList?.trackIds??loadedPlaylistIds;
+  const [playlistDialog,setPlaylistDialog]=useState<PlaylistDialogState|null>(null);
+  const [addingSongs,setAddingSongs]=useState(false);
+  const draggedSong=useRef<string|null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(() => clampSidebar(read<number>('bee-sidebar-width', 220)));
   const [view, setView] = useState<'grid' | 'spines'>(() => read('bee-view', 'grid'));
@@ -123,10 +132,31 @@ export default function App() {
   const togglePlayback = useRef(music.toggle);
   togglePlayback.current = music.toggle;
   const navigate = (nextPage: Page) => { setPage(nextPage); setSelected(null); setQuery(''); };
+  const menuUpdater = useRef(updater);
+  menuUpdater.current = updater;
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<string>('bee-menu-action', ({payload}) => {
+      if (disposed) return;
+      if (payload !== 'bee-settings' && payload !== 'bee-check-updates') return;
+      navigate('settings');
+      if (payload === 'bee-check-updates') {
+        if (menuUpdater.current.update) setUpdateOpen(true);
+        else void menuUpdater.current.checkNow().then(() => {
+          if (!disposed) setUpdateOpen(true);
+        });
+      }
+    }).then(stop => { if (disposed) stop(); else unlisten = stop; })
+      .catch(error => setToast(`菜单连接失败：${String(error)}`));
+    return () => { disposed = true; unlisten?.(); };
+  }, []);
   useEffect(() => { if (!artists.includes(artist)) setArtist(artists[0] ?? ''); }, [artists, artist]);
   useEffect(() => { if (!music.playlists.some(item => item.id === playlist)) setPlaylist(music.playlists[0]?.id ?? ''); }, [music.playlists, playlist]);
   useEffect(() => {
     let cancelled = false;
+    if(selectedCustomList){setPlaylistLoading(false);return;}
     setPlaylistIds([]);
     if (!playlist || !music.connected) { setPlaylistLoading(false); return; }
     setPlaylistLoading(true);
@@ -134,7 +164,8 @@ export default function App() {
       .catch(error => { if (!cancelled) music.setError(String(error)); })
       .finally(() => { if (!cancelled) setPlaylistLoading(false); });
     return () => { cancelled = true; };
-  }, [playlist, music.connected, music.loadPlaylist]);
+  }, [playlist, music.connected, music.loadPlaylist,selectedCustomList]);
+  useEffect(()=>{setAddingSongs(false);draggedSong.current=null;},[page,playlist]);
   useEffect(() => { if (!music.connected) setSelected(null); }, [music.connected]);
   useEffect(() => { setSelected(current => current ? albums.find(item => item.id === current.id) ?? current : null); }, [albums]);
   useEffect(() => {
@@ -155,6 +186,7 @@ export default function App() {
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
+      if (target.closest('dialog')) return;
       if ((event.metaKey || event.ctrlKey) && event.key === ',') { event.preventDefault(); setSelected(null); setPage('settings'); return; }
       if ((event.metaKey || event.ctrlKey) && /^[1-4]$/.test(event.key)) { event.preventDefault(); setSelected(null); setPage((['playing','artists','library','playlists'] as Page[])[Number(event.key)-1]); return; }
       if (event.code === 'Space' && !['INPUT', 'TEXTAREA', 'BUTTON', 'SELECT'].includes(target.tagName)) { event.preventDefault(); void togglePlayback.current(); }
@@ -183,7 +215,35 @@ export default function App() {
   const trackLookup = useMemo(() => new Map(albums.flatMap(record => record.tracks.map((song,index) => [song.id,{record,song,index}] as const))), [albums]);
   const playlistTracks = useMemo(() => playlistIds.flatMap(id => { const item = trackLookup.get(id); return item ? [item] : []; }).filter(item => !search || `${item.song.title} ${item.record.artist} ${item.record.title}`.toLowerCase().includes(search)), [playlistIds,trackLookup,search]);
   const closeQueue = useCallback(() => setQueueOpen(false), []);
-  const playlistName = music.playlists.find(item => item.id === playlist)?.name ?? '播放列表';
+  const activeList=music.playlists.find(item=>item.id===playlist);
+  const customLists=music.playlists.filter(item=>item.managed);
+  const applyPlaylistEdit=(change:PlaylistEdit)=>{void music.editPlaylist(change).catch(e=>notify(String(e)));};
+  const addToPlaylist=(ids:string[])=>setPlaylistDialog({kind:'add',ids});
+  const listActions=(list:NonNullable<typeof activeList>):MenuAction[]=>list.managed?[
+    ...(list.id===playlist?[{text:'添加歌曲…',action:()=>setAddingSongs(true)}]:[]),
+    {text:'重命名…',action:()=>setPlaylistDialog({kind:'rename',list})},
+    {text:'删除播放列表…',action:()=>setPlaylistDialog({kind:'delete',list})},
+  ]:[];
+  const songActions=(id:string,inList=false):MenuAction[]=>[
+    {text:'添加到播放列表…',enabled:music.listsReady,action:()=>addToPlaylist([id])},
+    ...(inList&&activeList?.managed?[
+      {text:'从播放列表移除',action:()=>applyPlaylistEdit({operation:'remove',id:playlist,trackIds:[id]})},
+      {text:'上移',enabled:!search&&playlistIds.indexOf(id)>0,action:()=>applyPlaylistEdit({operation:'move',id:playlist,trackIds:[id],beforeId:playlistIds[playlistIds.indexOf(id)-1]})},
+      {text:'下移',enabled:!search&&playlistIds.indexOf(id)<playlistIds.length-1,action:()=>applyPlaylistEdit({operation:'move',id:playlist,trackIds:[id],beforeId:playlistIds[playlistIds.indexOf(id)+2]})},
+    ]:[]),
+  ];
+  const saveListDialog=async(target:string,name:string)=>{
+    if(!playlistDialog)return;
+    const {kind,list,ids}=playlistDialog;
+    if(kind==='delete'||kind==='rename')await music.editPlaylist({operation:kind,id:list!.id,name});
+    else if(kind==='add'&&target){await music.editPlaylist({operation:'add',id:target,trackIds:ids});notify('已添加到播放列表');}
+    else {
+      const id=`bee:${crypto.randomUUID()}`;
+      await music.editPlaylist({operation:'create',id,name,trackIds:ids});
+      if(kind==='create'){navigate('playlists');setPlaylist(id);}else notify('已添加到新播放列表');
+    }
+  };
+  const playlistName = activeList?.name ?? '播放列表';
   const pageTitle = page === 'artists' ? searchResults.activeArtist || (search ? '搜索结果' : '艺术家') : page === 'library' ? '专辑' : page === 'playlists' ? playlistName : page === 'settings' ? '设置' : track?.title || '正在播放';
   const isCollection = ['library', 'artists', 'playlists'].includes(page);
   const navItems: { page: Page; label: string; icon: React.ReactNode }[] = [
@@ -194,6 +254,8 @@ export default function App() {
   ];
 
   return <div style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties} className={`app native-redesign ${visible ? '' : 'app-hidden'} ${sidebarOpen ? '' : 'sidebar-collapsed'} ${page === 'artists' || (page === 'playlists' && music.playlists.length>0) ? 'three-column' : ''}`}>
+    {playlistDialog&&<PlaylistDialog state={playlistDialog} lists={customLists} onSave={saveListDialog} onClose={()=>setPlaylistDialog(null)}/>}
+    {addingSongs&&activeList?.managed&&<PlaylistSongs albums={albums} existing={playlistIds} onClose={()=>setAddingSongs(false)} onSave={ids=>music.editPlaylist({operation:'add',id:playlist,trackIds:ids})}/>}
     <UpdateIndicator updater={updater} open={updateOpen} setOpen={setUpdateOpen}/>
     <aside className="sidebar">
       <div className={`window-chrome ${isTauri() ? 'native' : ''}`} onMouseDown={dragWindow}>
@@ -211,11 +273,15 @@ export default function App() {
     <main className="main">
       <header className="topbar" onMouseDown={dragWindow}>
         <div className="toolbar-leading">{!sidebarOpen && <IconButton label="显示侧栏" onClick={() => setSidebarOpen(true)}><PanelLeft size={18}/></IconButton>}<span>{selected ? selected.title : pageTitle}</span></div>
-        <div className="top-actions">{music.connected && isCollection && !selected && (page!=='playlists'||playlistIds.length>0) && <><ToolbarSearch key={page} query={query} onChange={setQuery} label="搜索资料库"/>{page !== 'playlists' && <><SortMenu value={sort} onChange={setSort}/><div className="view-toggle" role="group" aria-label="专辑显示方式"><IconButton label="封面" active={view === 'grid'} onClick={() => changeView('grid')}><Grid2X2 size={17} aria-hidden="true"/></IconButton><IconButton label="封脊" active={view === 'spines'} onClick={() => changeView('spines')}><Columns3 size={18} aria-hidden="true"/></IconButton></div></>}</>}</div>
+        <div className="top-actions">{music.connected&&music.listsReady&&page==='playlists'&&!selected&&<>
+          <IconButton label="新建播放列表" onClick={()=>setPlaylistDialog({kind:'create'})}><Plus size={18}/></IconButton>
+          {activeList?.managed&&<IconButton label="添加歌曲" onClick={()=>setAddingSongs(true)}><ListPlus size={18}/></IconButton>}
+          {activeList?.managed&&<button className="icon-button" title="播放列表操作" aria-label="播放列表操作" onClick={e=>{const r=e.currentTarget.getBoundingClientRect();void actionMenu(r.left,r.bottom+4,listActions(activeList));}}><MoreHorizontal size={18}/></button>}
+        </>}{music.connected && isCollection && !selected && (page!=='playlists'||playlistIds.length>0) && <><ToolbarSearch key={page} query={query} onChange={setQuery} label="搜索资料库"/>{page !== 'playlists' && <><SortMenu value={sort} onChange={setSort}/><div className="view-toggle" role="group" aria-label="专辑显示方式"><IconButton label="封面" active={view === 'grid'} onClick={() => changeView('grid')}><Grid2X2 size={17} aria-hidden="true"/></IconButton><IconButton label="封脊" active={view === 'spines'} onClick={() => changeView('spines')}><Columns3 size={18} aria-hidden="true"/></IconButton></div></>}</>}</div>
       </header>
       <div className="browser-body">
         {music.connected && page === 'artists' && <aside className="browser-column" aria-label="艺术家列表"><div className="column-list">{searchResults.artists.map(name => { return <button key={name} aria-pressed={searchResults.activeArtist === name} className={`artist-row ${searchResults.activeArtist === name ? 'selected' : ''}`} onClick={() => { setArtist(name); setSelected(null); }}><span>{name}</span></button>; })}{searchResults.artists.length === 0 && <EmptyScore compact label="未找到艺术家"/>}</div></aside>}
-        {music.connected && page === 'playlists' && music.playlists.length>0 && <aside className="browser-column" aria-label="播放列表"><div className="column-list">{music.playlists.map(item => <button className={`artist-row playlist-row ${playlist === item.id ? 'selected' : ''}`} aria-pressed={playlist === item.id} onClick={() => {setPlaylist(item.id);setSelected(null);setQuery('');}} key={item.id}><span className={`playlist-icon ${item.id}`}><ListMusic size={19}/></span><span>{item.name}</span></button>)}</div></aside>}
+        {music.connected && page === 'playlists' && music.playlists.length>0 && <aside className="browser-column" aria-label="播放列表"><div className="column-list">{music.playlists.map(item => <button className={`artist-row playlist-row ${playlist === item.id ? 'selected' : ''}`} aria-pressed={playlist === item.id} onClick={() => {setPlaylist(item.id);setSelected(null);setQuery('');}} onContextMenu={e=>{if(item.managed){e.preventDefault();void actionMenu(e.clientX,e.clientY,listActions(item));}}} key={item.id}><span className={`playlist-icon ${item.id}`}><ListMusic size={19}/></span><span>{item.name}</span></button>)}</div></aside>}
       <div className="main-scroll" ref={scrollRef}>
         {music.error && page!=='settings' && <div className="music-error" role="alert">{music.error}<button onClick={() => navigate('settings')}>查看设置</button></div>}
         {!music.connected && page !== 'settings' && <EmptyScore label="尚未连接音乐，可在设置中选择音乐库"/>}
@@ -227,9 +293,9 @@ export default function App() {
 
         </div>}
 
-        {music.connected && page === 'playlists' && !selected && <section className={`playlist-content ${!playlistTracks.length ? 'playlist-empty' : ''}`}>{playlistTracks.length>0&&<><div className="playlist-actions"><button className="dark-button" disabled={playlistLoading || !playlistIds.length} onClick={() => void music.playPlaylist(playlist)}><Play size={14} fill="currentColor"/>播放</button></div><div className="playlist-table"><div className="playlist-table-head"><span>#</span><span>歌曲</span><span>专辑</span><span>时长</span></div>{playlistTracks.map(({record,song,index},row) => <button className={`playlist-song ${record.id === currentId && trackIndex === index ? 'current' : ''}`} key={`${song.id}-${row}`} onContextMenu={e=>{e.preventDefault();void trackMenu(e.clientX,e.clientY,()=>void music.playPlaylist(playlist,song.id),()=>void music.playTrack(record,index,true));}} onClick={() => music.playPlaylist(playlist,song.id)}><span className="song-number">{record.id === currentId && trackIndex === index && playing ? <span className="equalizer"><i/><i/><i/></span> : row+1}</span><span className="song-title"><Artwork album={record} alt=""/><span>{song.title}<small>{record.artist}</small></span></span><span className="song-album">{record.title}</span><span className="song-time">{time(song.duration)}</span></button>)}</div></>}{!playlistTracks.length && <EmptyScore label={playlistLoading ? '正在读取播放列表' : '暂无歌曲'}/>}</section>}
+        {music.connected && page === 'playlists' && !selected && <section className={`playlist-content ${!playlistTracks.length ? 'playlist-empty' : ''}`}>{playlistTracks.length>0&&<><div className="playlist-actions"><button className="dark-button" disabled={playlistLoading || !playlistIds.length} onClick={() => void music.playPlaylist(playlist)}><Play size={14} fill="currentColor"/>播放</button></div><div className="playlist-table"><div className="playlist-table-head"><span>#</span><span>歌曲</span><span>专辑</span><span>时长</span></div>{playlistTracks.map(({record,song,index},row) => <button className={`playlist-song ${record.id === currentId && trackIndex === index ? 'current' : ''}`} key={`${song.id}-${row}`} draggable={!!activeList?.managed&&!search} onDragStart={e=>{draggedSong.current=song.id;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',song.id);}} onDragEnd={()=>{draggedSong.current=null;document.querySelectorAll('[data-drop]').forEach(node=>node.removeAttribute('data-drop'));}} onDragOver={e=>{if(activeList?.managed&&!search&&draggedSong.current){e.preventDefault();e.dataTransfer.dropEffect='move';const r=e.currentTarget.getBoundingClientRect();e.currentTarget.dataset.drop=e.clientY>r.top+r.height/2?'after':'before';}}} onDragLeave={e=>{delete e.currentTarget.dataset.drop;}} onDrop={e=>{e.preventDefault();delete e.currentTarget.dataset.drop;const id=draggedSong.current;draggedSong.current=null;if(id&&id!==song.id){const r=e.currentTarget.getBoundingClientRect();const at=playlistIds.indexOf(song.id);applyPlaylistEdit({operation:'move',id:playlist,trackIds:[id],beforeId:e.clientY>r.top+r.height/2?playlistIds[at+1]:song.id});}}} onContextMenu={e=>{e.preventDefault();void trackMenu(e.clientX,e.clientY,()=>void music.playPlaylist(playlist,song.id),()=>void music.playTrack(record,index,true),songActions(song.id,true));}} onClick={() => music.playPlaylist(playlist,song.id)}><span className="song-number">{record.id === currentId && trackIndex === index && playing ? <span className="equalizer"><i/><i/><i/></span> : row+1}</span><span className="song-title"><Artwork album={record} alt=""/><span>{song.title}<small>{record.artist}</small></span></span><span className="song-album">{record.title}</span><span className="song-time">{time(song.duration)}</span></button>)}</div></>}{!playlistTracks.length && <EmptyScore label={playlistLoading ? '正在读取播放列表' : '暂无歌曲'}/>}</section>}
 
-      {selected && <section className="album-detail-page"><button className="detail-back text-button" onClick={closeAlbum}><ArrowLeft size={17}/>返回</button><div className="album-detail-header" style={{ background: selected.color, color: selected.ink }}><div className="detail-record-art"><Vinyl album={selected}/><Artwork album={selected} alt={`${selected.title} 封面`}/></div><div><p>{selected.artist}</p><small>{selected.year} · {selected.genre} · {selected.tracks.length} 首歌曲</small><div className="detail-actions"><button className="dark-button" onClick={() => startAlbum(selected)}><Play size={14} fill="currentColor"/>播放</button><button className="outline-button" onClick={() => {navigate('playing');}}>进入播放页</button></div></div></div><div className="track-list">{selected.tracks.map((item, index) => <button className={`track-row ${currentId === selected.id && trackIndex === index ? 'current' : ''}`} key={item.id} onContextMenu={e=>{e.preventDefault();void trackMenu(e.clientX,e.clientY,()=>void music.playTrack(selected,index),()=>void music.playTrack(selected,index,true));}} onClick={() => music.playTrack(selected, index)}><span className="track-number">{currentId === selected.id && trackIndex === index && playing ? <span className="equalizer"><i/><i/><i/></span> : String(index + 1).padStart(2, '0')}</span><span>{item.title}</span><span>{time(item.duration)}</span><Play size={13}/></button>)}</div></section>}
+      {selected && <section className="album-detail-page"><button className="detail-back text-button" onClick={closeAlbum}><ArrowLeft size={17}/>返回</button><div className="album-detail-header" style={{ background: selected.color, color: selected.ink }}><div className="detail-record-art"><Vinyl album={selected}/><Artwork album={selected} alt={`${selected.title} 封面`}/></div><div><p>{selected.artist}</p><small>{selected.year} · {selected.genre} · {selected.tracks.length} 首歌曲</small><div className="detail-actions"><button className="dark-button" onClick={() => startAlbum(selected)}><Play size={14} fill="currentColor"/>播放</button><button className="text-button" disabled={!music.listsReady} onClick={()=>addToPlaylist(selected.tracks.map(t=>t.id))}><ListPlus size={16}/>添加到播放列表</button></div></div></div><div className="track-list">{selected.tracks.map((item, index) => <button className={`track-row ${currentId === selected.id && trackIndex === index ? 'current' : ''}`} key={item.id} onContextMenu={e=>{e.preventDefault();void trackMenu(e.clientX,e.clientY,()=>void music.playTrack(selected,index),()=>void music.playTrack(selected,index,true),songActions(item.id));}} onClick={() => music.playTrack(selected, index)}><span className="track-number">{currentId === selected.id && trackIndex === index && playing ? <span className="equalizer"><i/><i/><i/></span> : String(index + 1).padStart(2, '0')}</span><span>{item.title}</span><span>{time(item.duration)}</span><Play size={13}/></button>)}</div></section>}
 
         {music.connected && page === 'playing' && !selected && album && track && <section className="minimal-player" aria-label={track.title}>
           <div className="listening-stack">

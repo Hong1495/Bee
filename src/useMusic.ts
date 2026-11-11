@@ -16,7 +16,11 @@ function sameTrack(a:MusicTrack|null,b:MusicTrack|null) {
 const emptyLibrary:Library={tracks:[],playlists:[]};
 const request = <T,>(operation:string, id?:string) => invoke<T>('music_request', {operation,id:id??null});
 const local = <T,>(operation:string,id?:string) => invoke<T>('local_request',{operation,id:id??null});
+export type PlaylistEdit = {operation:'create'|'rename'|'delete'|'add'|'remove'|'move';id:string;name?:string;trackIds?:string[];beforeId?:string};
 export function useMusic() {
+ const [customLists,setCustomLists]=useState<MusicPlaylist[]>([]);
+ const [listsReady,setListsReady]=useState(false);
+ const edits=useRef<Promise<unknown>>(Promise.resolve());
  const [source,setSource]=useState<'music'|'local'>(()=>localStorage.getItem('bee-library-source')==='local'?'local':'music');
  const sourceRef=useRef(source);
  const [initialSession]=useState(readPlayback);
@@ -50,7 +54,22 @@ export function useMusic() {
  useEffect(()=>{const save=()=>persist(true);window.addEventListener('bee-before-update',save);window.addEventListener('pagehide',save);document.addEventListener('visibilitychange',save);return()=>{save();window.removeEventListener('bee-before-update',save);window.removeEventListener('pagehide',save);document.removeEventListener('visibilitychange',save);};},[persist]);
  const tracks=useMemo(()=>source==='music'?library.tracks:localLibrary.tracks,[source,library,localLibrary]);
  const lookup=useMemo(()=>new Map(tracks.map(t=>[t.id,t])),[tracks]);
- const playlists=useMemo(()=>source==='music'?library.playlists:localLibrary.playlists,[source,library,localLibrary]);
+ useEffect(()=>{
+  if(!isTauri())return;
+  let active=true;
+  void invoke<MusicPlaylist[]>('playlist_request',{change:{operation:'list',source:'music'}}).then(lists=>{if(active){setCustomLists(lists);setListsReady(true);}}).catch(e=>{if(active)setError(String(e));});
+  return()=>{active=false;};
+ },[]);
+ const editPlaylist=useCallback((change:PlaylistEdit)=>{
+  const editSource=sourceRef.current;
+  const task=edits.current.catch(()=>{}).then(async()=>{
+   const lists=await invoke<MusicPlaylist[]>('playlist_request',{change:{...change,source:editSource}});
+   setCustomLists(lists);
+  });
+  edits.current=task;
+  return task;
+ },[]);
+ const playlists=useMemo(()=>[...(source==='music'?library.playlists:localLibrary.playlists),...customLists.filter(p=>p.source===source)],[source,library,localLibrary,customLists]);
  const albums=useMemo(()=>groupAlbums(tracks),[tracks]);
  const start=useCallback(async(next:QueueState,seconds=0)=>{
   const song=next.tracks[next.index];if(!song)return;
@@ -113,7 +132,7 @@ export function useMusic() {
   });
  },[control,replaceQueue,publish,folders,connect]);
  useEffect(()=>{let stopped=false;let timer:ReturnType<typeof setTimeout>;const poll=async()=>{await refreshStatus();if(!stopped)timer=setTimeout(poll,800);};void poll();return()=>{stopped=true;clearTimeout(timer);};},[refreshStatus]);
- const loadPlaylist=useCallback(async(id:string)=>{const list=playlists.find(p=>p.id===id);return list?.source==='local'?list.trackIds??[]:request<string[]>('playlist',id);},[playlists]);
+ const loadPlaylist=useCallback(async(id:string)=>{const list=playlists.find(p=>p.id===id);return list?.managed||list?.source==='local'?list.trackIds??[]:request<string[]>('playlist',id);},[playlists]);
  const playTrack=useCallback((record:Album,index:number,only=false)=>control(async()=>{const songs=record.tracks.flatMap(t=>lookup.get(t.id)?[lookup.get(t.id)!]:[]);await start({name:only?record.tracks[index].title:record.title,tracks:only?[songs[index]]:songs,index:only?0:index});}),[control,lookup,start]);
  const playAlbum=useCallback((record:Album)=>playTrack(record,0),[playTrack]);
  const playPlaylist=useCallback((id:string,songId?:string)=>control(async()=>{const ids=await loadPlaylist(id);const songs=ids.flatMap(key=>lookup.get(key)?[lookup.get(key)!]:[]);await start({name:playlists.find(p=>p.id===id)?.name??'',tracks:songs,index:songId?Math.max(0,songs.findIndex(s=>s.id===songId)):0});}),[control,loadPlaylist,lookup,playlists,start]);
@@ -128,5 +147,5 @@ export function useMusic() {
  const jump=useCallback((index:number)=>control(()=>start({...queueRef.current,index})),[control,start]);
  const albumIndex=useMemo(()=>new Map(albums.map(a=>[a.id,a])),[albums]);
  const currentAlbum=useMemo(()=>snapshot.track?albumIndex.get(albumKey(snapshot.track))??groupAlbums([snapshot.track])[0]:undefined,[snapshot.track,albumIndex]);
- return {source,selectLibrary,queue,jump,transportBusy,canPrevious:queue.index>0,canNext:queue.index>=0&&queue.index+1<queue.tracks.length,position,albums,playlists,connected:source==='music'?musicConnected:localLibrary.folders.length>0,musicConnected,busy,error,setError,connect,disconnect,playAlbum,playTrack,playPlaylist,toggle,skip,loadPlaylist,currentAlbum,currentId:snapshot.track?albumKey(snapshot.track):'',track:snapshot.track,playing:snapshot.playing,running:snapshot.running,folders:localLibrary.folders,folderWarnings:localLibrary.warnings,folderBusy,updateFolders:folders};
+ return {source,selectLibrary,editPlaylist,listsReady,queue,jump,transportBusy,canPrevious:queue.index>0,canNext:queue.index>=0&&queue.index+1<queue.tracks.length,position,albums,playlists,connected:source==='music'?musicConnected:localLibrary.folders.length>0,musicConnected,busy,error,setError,connect,disconnect,playAlbum,playTrack,playPlaylist,toggle,skip,loadPlaylist,currentAlbum,currentId:snapshot.track?albumKey(snapshot.track):'',track:snapshot.track,playing:snapshot.playing,running:snapshot.running,folders:localLibrary.folders,folderWarnings:localLibrary.warnings,folderBusy,updateFolders:folders};
 }

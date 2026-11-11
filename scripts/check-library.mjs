@@ -16,7 +16,16 @@ const musicTracks=[song('0000000000000001'),song('0000000000000002'),song('00000
 const localTracks=[song('local:1','local'),song('local:2','local')];
 let musicStatus={running:true,playing:false,track:null,position:0},localStatus={playing:true,ended:false,position:0};
 const React={useState(initial){const i=cursor++;slots[i]??={value:typeof initial==='function'?initial():initial};return [slots[i].value,v=>{slots[i].value=typeof v==='function'?v(slots[i].value):v;}];},useRef(initial){const i=cursor++;slots[i]??={current:initial};return slots[i];},useMemo(fn){cursor++;return fn();},useCallback(fn){cursor++;return fn;},useEffect(fn){cursor++;effects.push(fn);}};
-const invoke=async(command,args)=>{calls.push({command,...args});if(command==='local_request'){if(['scan','add','remove'].includes(args.operation))return {tracks:localTracks,playlists:[],folders:[{id:'folder:1',name:'Folder',path:'/fixture'}],warnings:[]};if(args.operation==='status')return localStatus;return {};}
+let customLists=[];
+const invoke=async(command,args)=>{calls.push({command,...args});
+ if(command==='playlist_request'){
+  const c=args.change;
+  if(c.operation==='create')customLists.push({id:c.id,name:c.name,source:c.source,managed:true,trackIds:c.trackIds??[]});
+  if(c.operation==='remove')customLists=customLists.map(p=>p.id===c.id?{...p,trackIds:p.trackIds.filter(id=>!c.trackIds.includes(id))}:p);
+  if(c.operation==='delete')customLists=customLists.filter(p=>p.id!==c.id);
+  return structuredClone(customLists);
+ }
+if(command==='local_request'){if(['scan','add','remove'].includes(args.operation))return {tracks:localTracks,playlists:[],folders:[{id:'folder:1',name:'Folder',path:'/fixture'}],warnings:[]};if(args.operation==='status')return localStatus;return {};}
  if(args.operation==='library')return {tracks:musicTracks,playlists:[{id:'playlist',name:'List'}]};if(args.operation==='playlist')return musicTracks.map(t=>t.id).reverse();if(args.operation==='status')return musicStatus;return {};};
 const data=load('src/data.ts');
 const session=load('src/playbackSession.ts');
@@ -84,3 +93,22 @@ assert.equal(searchLibrary(searchAlbums,searchIndex,'不存在','歌手甲').art
 assert.equal(searchLibrary(searchAlbums,searchIndex,'live','歌手乙').artistAlbums.length,1);
 assert.equal(searchLibrary(searchAlbums,searchIndex,'乙其他专辑','歌手乙').artistAlbums.length,1);
 console.log('PASS: song search across artists, artist switching retains matching albums and artist choices, query clearing, artist/album search, case folding and empty results');
+
+// Bee-managed Apple Music lists use persisted membership, never Music's playlist endpoint.
+await result.connect();render();
+await result.editPlaylist({operation:'create',id:'bee:music',name:'Bee list',trackIds:[musicTracks[2].id,'missing',musicTracks[0].id]});render();
+const beforeListReads=calls.filter(c=>c.operation==='playlist').length;
+await result.playPlaylist('bee:music',musicTracks[0].id);render();
+assert.equal(result.queue.tracks.length,2);assert.equal(result.queue.index,1);
+assert.equal(result.queue.tracks[0].id,musicTracks[2].id);
+assert.equal(calls.filter(c=>c.operation==='playlist').length,beforeListReads);
+const queueBefore=result.queue;
+await result.editPlaylist({operation:'remove',id:'bee:music',trackIds:[musicTracks[2].id]});render();
+assert.equal(result.queue,queueBefore);
+await result.selectLibrary('local');render();assert.ok(!result.playlists.some(p=>p.id==='bee:music'));
+await result.editPlaylist({operation:'create',id:'bee:local',name:'Local list',trackIds:['local:2','local:1']});render();
+await result.playPlaylist('bee:local');render();assert.equal(result.track.id,'local:2');assert.equal(result.queue.tracks.length,2);
+const localQueue=result.queue;
+await result.editPlaylist({operation:'delete',id:'bee:local'});render();assert.equal(result.queue,localQueue);
+await result.selectLibrary('music');render();assert.ok(result.playlists.some(p=>p.id==='bee:music'));
+console.log('PASS: custom list source isolation, local and Apple Music playback order, unavailable track skip, edits/deletion preserve live queue');
