@@ -285,7 +285,6 @@ export default function App() {
   const customLists=music.playlists.filter(item=>item.managed);
   const applyPlaylistEdit=(change:PlaylistEdit)=>{void music.editPlaylist(change).catch(e=>notify(String(e)));};
   const listActions=(list:NonNullable<typeof activeList>):MenuAction[]=>list.managed?[
-    ...(list.id===playlist?[{text:'添加歌曲…',icon:'add' as const,action:()=>setAddingSongs(true)}]:[]),
     {text:'重命名…',icon:'rename' as const,action:()=>setPlaylistDialog({kind:'rename',list})},
     {text:'删除播放列表…',icon:'delete' as const,action:()=>setPlaylistDialog({kind:'delete',list})},
   ]:[];
@@ -323,7 +322,7 @@ export default function App() {
     {playlistDialog&&<PlaylistDialog state={playlistDialog} lists={customLists} onSave={saveListDialog} onClose={()=>setPlaylistDialog(null)}/>}
     {addingSongs&&activeList?.managed&&<PlaylistSongs albums={albums} existing={playlistIds} onClose={()=>setAddingSongs(false)} onSave={ids=>music.editPlaylist({operation:'add',id:playlist,trackIds:ids})}/>}
     <UpdateIndicator updater={updater} open={updateOpen} setOpen={setUpdateOpen}/>
-    <div className="window-navigation"><div className="history-navigation" role="group" aria-label="浏览导航"><button className="icon-button" aria-label="后退" title="后退（⌘[）" disabled={!history.current.canBack} onClick={()=>travelHistory(-1)}><ArrowLeft size={18}/></button><button className="icon-button" aria-label="前进" title="前进（⌘]）" disabled={!history.current.canForward} onClick={()=>travelHistory(1)}><ArrowRight size={18}/></button></div><IconButton label={sidebarOpen ? "隐藏侧栏" : "显示侧栏"} className="sidebar-toggle" onClick={() => setSidebarOpen(value=>!value)}><PanelLeft size={18}/></IconButton></div>
+    <div className="window-navigation"><div className="history-navigation" role="group" aria-label="浏览导航"><button className="icon-button" aria-label="后退" title="后退（⌘[）" disabled={!history.current.canBack} onClick={()=>travelHistory(-1)}><ArrowLeft size={17} strokeWidth={1.5}/></button><button className="icon-button" aria-label="前进" title="前进（⌘]）" disabled={!history.current.canForward} onClick={()=>travelHistory(1)}><ArrowRight size={17} strokeWidth={1.5}/></button></div><IconButton label={sidebarOpen ? "隐藏侧栏" : "显示侧栏"} className="sidebar-toggle" onClick={() => setSidebarOpen(value=>!value)}><PanelLeft size={18}/></IconButton></div>
     <aside className="sidebar">
       <div className={`window-chrome ${isTauri() ? 'native' : ''}`} onMouseDown={dragWindow}>
         {!isTauri() && <span className="preview-traffic-lights"><i/><i/><i/></span>}
