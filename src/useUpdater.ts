@@ -8,7 +8,7 @@ export type UpdatePhase='idle'|'checking'|'available'|'downloading'|'installing'
 const preference='bee-auto-update';
 export function useUpdater(){
  const [automatic,setAutomatic]=useState(()=>localStorage.getItem(preference)!=='false');
- const [version,setVersion]=useState('0.1.3');
+ const [version,setVersion]=useState('0.1.4');
  const [update,setUpdate]=useState<Update|null>(null);
  const [phase,setPhase]=useState<UpdatePhase>('idle');
  const [error,setError]=useState('');const [checked,setChecked]=useState(false);
@@ -31,7 +31,7 @@ export function useUpdater(){
   localStorage.setItem(preference,String(automatic));
   if(!automatic||!isTauri())return;
   return scheduleUpdateChecks(checkNow,{
-   now:Date.now,visible:()=>!document.hidden,later:setTimeout,cancel:clearTimeout,
+   now:Date.now,visible:()=>!document.hidden,later:(fn,ms)=>window.setTimeout(fn,ms),cancel:id=>window.clearTimeout(id),
    listen:(event,fn)=>{const target=event==='visibilitychange'?document:window;target.addEventListener(event,fn);return()=>target.removeEventListener(event,fn);},
   });
  },[automatic,checkNow]);
