@@ -1,105 +1,115 @@
-# Bee
+<p align="center">
+  <img src="public/icons/light.png" width="112" height="112" alt="Bee · 方 B 图标">
+</p>
+<h1 align="center">Bee</h1>
+<p align="center"><strong>好音乐，慢慢听。</strong></p>
+<p align="center">为 macOS 打造的黑胶音乐播放器。翻阅封套，拨动封脊，让音乐回到唱片上。</p>
+<p align="center">
+  <a href="https://github.com/Hong1495/Bee/releases/latest">下载最新版</a> ·
+  <a href="#界面一览">界面一览</a> ·
+  <a href="#从-b-到-bee">名字与图标</a> ·
+  <a href="docs/development.md">开发指南</a>
+</p>
+<p align="center"><sub>macOS 12+ · Apple Silicon · React + Rust + Tauri · 开源 / MIT</sub></p>
 
-为 macOS 打造的黑胶音乐界面，使用 **React + TypeScript + Tauri 2**。
-选择本机“音乐”（Music）App 或本地音乐文件夹，用封面、封脊和唱机呈现音乐。每次只启用一个音乐库。
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/now-playing-dark.png">
+    <img src="docs/images/now-playing-light.png" width="100%" alt="Bee 播放界面：Hotel California 的封套、黑胶唱片、唱臂、同步歌词和悬浮播放控制">
+  </picture>
+</p>
+<p align="center"><sub>封套、唱片与歌词，留在同一个安静的画面里。</sub></p>
 
-目前处于早期开发阶段。支持本机 Music 中的本地音乐，以及已加入资料库的 Apple Music 订阅歌曲；Spotify 和 Apple Music 完整在线目录尚未接入。
+## 把音乐放回唱片架
 
-## 功能
+Bee 连接 Mac 上的“音乐”App，也能直接播放你收藏的本地音频。沿着艺术家、专辑和自定义播放列表浏览，在封面与封脊之间切换，选一张唱片，放下唱臂。
 
-- 艺术家、专辑、播放列表导航与资料库搜索、排序。
-- 封面网格、横向透视封脊，以及专辑曲目页。
-- 黑胶唱机、封套、随播放进度移动的唱臂和悬浮播放控制。
-- Bee 管理来源队列：专辑／列表从头播放，点曲目从所选位置继续，右键可仅播放一首。
-- 本地目录可添加、移除、重新扫描；不复制或修改原始音乐。支持 MP3、FLAC、AAC/M4A（含 ALAC）、WAV、AIFF、Ogg Vorbis，受解码器及文件实际编码限制，不支持 DRM 文件。
-- LRCLIB、网易云同步歌词交叉查找与 lyrics.ovh 纯文本补充，可设置多个兼容 HTTPS 接口及优先顺序。
-- 三行同步歌词，中间高亮、上下淡化；无时间轴时可展开纯文本。
-- 封面／歌词缓存合计限额、占用统计和清理；默认上限 512 MB。
-- 本地封面缓存、可见区域按需读取、重复请求合并。
-- macOS 窗口行为、可调整宽度的侧栏、浅色／深色／跟随系统界面。
-- 原生 Icon Composer 图标资源：默认白底，暗色与透明外观由支持这些样式的 macOS 管理。
-- 圆 b（B♭）悬停提示音、方 B（B♮）封脊换格提示音，可在设置关闭。
+| 浏览 | 聆听 | 日常使用 |
+| :--- | :--- | :--- |
+| 封面陈列与横向立体封脊 | 黑胶纹理、自然光泽与进度唱臂 | 浅色、深色与跟随系统 |
+| 艺术家、专辑、全库搜索与排序 | 同步歌词，上下淡化、逐行跟随 | 原生菜单、可调侧栏与窗口导航 |
+| 自定义列表与自动拼合封面 | 专辑、列表与单曲播放队列 | 封面与歌词缓存限额、应用内更新 |
 
-## 下载与更新
+## 界面一览
 
-首个 Apple Silicon 安装包见 [GitHub Releases](https://github.com/Hong1495/Bee/releases/latest)。将 Bee.app 拖入“应用程序”后运行。设置中可关闭自动检查更新，或手动检查；检测到新版时红绿灯右侧显示橙色下载按钮。下载、校验、安装后由用户确认重启。
+**封面 · 像翻阅收藏一样找音乐**
 
-更新包使用独立签名校验，首版尚无 Apple Developer ID 签名与公证。后续发布方法见 [发布说明](docs/releases.md)。
+![封面模式：专辑封套与露出的黑胶唱片组成网格](docs/images/albums-light.png)
 
-## 开发
+**封脊 · 一格一格，拨动唱片架**
 
-需要 macOS、Node.js 22+、Rust stable 和 Xcode Command Line Tools。Music 集成与原生窗口功能需要在 macOS 应用内运行。
+![封脊模式：专辑以横向透视排列，显示封脊与封套侧面](docs/images/spines-light.png)
+
+<details>
+<summary>查看深色播放界面</summary>
+
+![深色播放界面：柔和的深灰背景、专辑配色唱片标签与同步歌词](docs/images/now-playing-dark.png)
+
+</details>
+
+<sub>以上为正在运行的 Bee 0.1.10 实机截图，截于 2026-11-11；左上角紫色标记是 macOS 截屏时的窗口共享指示，不属于 Bee 界面。歌曲与封面仅用于展示，版权归各自权利人所有。</sub>
+
+## 从 B 到 Bee
+
+**Bee 与字母 B 同音，图标的灵感来自乐谱里的「方 b」。**
+
+中世纪记谱用两种 b 区分音高：圆润的 **b rotundum** 表示降 B，逐渐演变为降号 **♭**；方正的 **b quadratum** 表示本位 B，也是今天还原号 **♮** 的历史来源。Bee 取方 b 的轮廓，保留一点手写的自然感，把这个小小的音乐符号作为自己的标记。
+
+<p align="center">
+  <img src="docs/images/b-origin.svg" width="720" alt="高音谱表中，同一小节的两个音符都在 B 的位置：第一个加降号成为 B♭，第二个加还原号恢复为 B♮。">
+</p>
+<p align="center"><sub>同一个谱位，先降 B，再还原 B。两个符号，一点音高的变化。</sub></p>
+
+这对符号也藏在交互里：悬停专辑时是 B♭，封脊换格时是 B♮。两段短提示音为原创合成，可在设置中关闭。
+
+<sub>记谱史参考：[赫尔辛基艺术大学 · Chromatic symbols](https://sites.uniarts.fi/web/musiikin-teoria-1/notation/chromatic-symbols)。上图为现代记谱示意，并非历史字形复刻。</sub>
+
+## 开始聆听
+
+从 [GitHub Releases](https://github.com/Hong1495/Bee/releases/latest) 下载 Apple Silicon（arm64）DMG，将 **Bee.app** 拖入“应用程序”，然后在 **设置 → 音乐库** 选择来源：
+
+| 来源 | 可以播放什么 | 如何连接 |
+| :--- | :--- | :--- |
+| **Apple Music / 音乐 App** | 本机 Music 资料库中的本地音乐，以及已加入资料库的订阅歌曲 | 连接后允许 Bee 控制“音乐”App；订阅内容由 Music 播放 |
+| **本地文件夹** | MP3、FLAC、AAC / M4A（含 ALAC）、WAV、AIFF、Ogg Vorbis | 选择一个或多个目录，由 Bee 扫描并直接播放，不复制或修改原文件 |
+
+每次启用一个音乐库。切换来源会停止播放、清空当前队列，保留配置与缓存。Music 授权由 macOS“隐私与安全性 → 自动化”管理，无需向 Bee 提供 Apple ID 密码或开发者令牌。
+
+开启自动检查更新后，发现新版会在窗口红绿灯右侧显示橙色下载按钮，也可以从系统菜单或设置中手动检查。更新经过签名校验，安装后确认重启即可。
+
+> Bee 仍处于早期开发阶段。目前未接入 Spotify 和 Apple Music 完整在线目录；本地播放不支持 DRM 文件。发行包尚无 Apple Developer ID 签名与公证，更新包的独立签名校验不等同于 Apple 公证。
+
+## 关于歌词与数据
+
+- **歌词**：LRCLIB 与网易云交叉查找同步歌词，lyrics.ovh 补充纯文本；可调整来源和顺序。查询会将歌曲信息发送给启用的歌词源，匹配核对歌名、歌手、版本与时长，没有时间轴时不模拟滚动。
+- **缓存**：封面和歌词合计默认上限 512 MB，可查看占用或清理。原始音乐、应用本体和系统 WebKit 数据不计入此限额。
+- **资料库**：音乐来自你连接的 Music 或所选文件夹，移除文件夹不会删除原文件。仓库不提供音乐下载，也不附带示例音频资料库。
+
+<details>
+<summary>当前边界与实现细节</summary>
+
+- 本地播放使用 Rust **rodio / Symphonia**；Music 集成使用 **Apple Events / JXA**，控制本机“音乐”App。
+- Bee 按来源快照管理队列：专辑／列表从头播放，点曲目从选中位置继续，右键可仅播放一首。不复现 Music 的私有队列及随机／循环行为，目前不支持无缝播放。在 Music 中另选歌曲会退出 Bee 原有队列。
+- Music 资料库读取和状态回报速度取决于库规模与 Music 响应；本地格式支持取决于文件的实际编码。
+- [LRCLIB](https://lrclib.net/docs) 精确查找失败后会搜索候选；网易云使用非官方 Web 接口，覆盖率与长期可用性不作保证。[lyrics.ovh](https://github.com/NTag/lyrics.ovh#api) 仅补充纯文本。未找到或网络失败时可在播放页重试。
+- 封面缓存有效期为 30 天。2048 像素以内的 JPEG / PNG 保留源文件，更大图片采用高质量缩放缓存。
+- 系统图标使用 Icon Composer 资源，默认白底；暗色与透明图标由支持相应外观的 macOS 管理。图标主体经 AI 辅助生成。
+
+</details>
+
+## 开发与贡献
+
+使用 **React 19 + TypeScript + Rust + Tauri 2**。在 macOS 上安装 Node.js 22+、Rust stable 与 Xcode Command Line Tools 后：
 
 ```sh
 npm ci
 npm run tauri -- dev
 ```
 
-只预览网页界面：`npm run dev`。浏览器中无法连接本机 Music。
+构建、验证命令和项目结构见 [开发指南](docs/development.md)，打包与更新签名见 [发布指南](docs/releases.md)。
 
-首次使用，在 **设置 → 音乐库** 中连接 Apple Music，并允许 Bee 控制“音乐”App。
-本地文件夹模式使用系统目录选择器，可添加多个目录。切换音乐库会停止播放并清空队列，保留配置与缓存。
-
-授权由系统的“隐私与安全性 → 自动化”管理，不需要提供 Apple ID 密码或开发者令牌。
-
-## 构建
-
-```sh
-npm run tauri -- build
-```
-
-产物：`src-tauri/target/release/bundle/macos/Bee.app`。
-本仓库尚未配置 Developer ID 分发签名和公证；本机构建不等于已签名发行包。
-
-修改图标后，用包含 Icon Composer 的 Xcode 重新生成资源：
-
-```sh
-sh scripts/build-macos-icon.sh
-```
-
-当前图标源位于 `src-tauri/icons/Bee.icon`。编译后的 `Assets.car`、ICNS 和默认 PNG 随源码提供；普通构建无需重新制作图标。原色、暗色及透明导出预览生成于忽略的 `src-tauri/icons/compiled/` 目录。系统外观是否显示取决于 macOS 版本和系统设置。
-
-提示音为原创合成 PCM 素材，生成脚本：`python3 scripts/build-ui-sounds.py`。
-
-## 验证
-
-```sh
-npm run check
-cargo test --manifest-path src-tauri/Cargo.toml
-```
-
-检查包含 TypeScript／Vite 构建、Music API 模拟测试、真实 Hook 队列／音乐库隔离测试、LRC 时间轴边界、本地 WAV 扫描与解码、缓存预算、封面请求队列和提示音逻辑测试。
-模拟测试不替代真实 Music 授权、播放及 macOS 外观验证。
-
-`node scripts/check-performance.mjs` 另外验证封脊定位与原算法结果一致、切换歌手复用搜索分组、长队列重复保存不产生额外写入，并输出一万张专辑的计算耗时对比。它是算法微基准，不代表 App 帧率或端到端加载速度。
-
-## 项目结构
-
-| 路径 | 内容 |
-| --- | --- |
-| `src/` | React 页面、封脊交互、唱臂与图片加载 |
-| `src-tauri/src/` | Rust 命令、窗口和本地封面缓存 |
-| `src-tauri/music/bridge.js` | Music 的 Apple Events / JXA 接口 |
-| `src-tauri/icons/` | 当前图标源与构建资源 |
-| `public/sounds/` | 原创提示音素材 |
-| `scripts/` | 资源生成及回归检查 |
-
-## 数据与当前限制
-
-- 资料库来自用户本机 Music 或用户选择的文件夹；仓库不包含歌曲、专辑封面或个人资料库数据。
-- 在线歌词会向启用的歌词源发送歌曲名称、艺术家、专辑和时长。歌词覆盖率与接口可用性由来源决定；纯文本不伪造同步时间轴。来源：[LRCLIB API](https://lrclib.net/docs)、[lyrics.ovh API](https://github.com/NTag/lyrics.ovh#api)。
-- 缓存上限约束 Bee 管理的封面及歌词缓存，不包含 App 本体、设置、WebKit 运行数据或原始音频。移除目录不会删除文件。
-- 封面缓存位于系统应用缓存目录（`studio.bee.vinyl/artwork-v2`），有效期为 30 天。2048 像素以内的 JPEG／PNG 保留源文件；更大的图片使用高质量缩放缓存。
-- 曲目列表和切歌按 Bee 的来源快照顺序工作。Music 单曲以 once 模式播放，Bee 根据结束状态推进；不复现 Music 私有队列及随机／循环行为，不支持无缝播放。请在 Bee 内控制队列；在 Music 中另选歌曲会退出 Bee 原有队列。
-- 界面依赖 Music 回报播放状态，读取速度取决于资料库规模和 Music 响应。
-- 图标主体使用 AI 辅助生成，并通过 Icon Composer 制作系统外观资源。历史设计稿和第三方参考截图不包含在仓库中。
-
-## 参与贡献
-
-欢迎通过 Issue 反馈问题或提交 Pull Request。反馈请注明 macOS 版本、复现步骤及期望行为；分享日志或截图前请去除个人资料。提交修改前运行上面的验证命令。
+欢迎提交 [Issue](https://github.com/Hong1495/Bee/issues) 或 Pull Request。反馈问题时请附 macOS / Bee 版本与复现步骤；日志和截图请先去除个人信息。
 
 ## 许可
 
-[MIT](LICENSE)。Apple Music、macOS 及其他第三方名称和商标属于各自所有者；Bee 为独立项目。
-
-歌词匹配会核对歌名、歌手、版本与时长，LRCLIB 精确查找失败后搜索候选。网易云适配使用非官方 Web 接口，不保证覆盖率和长期可用性；不会拿同名翻唱替代原版。未找到和网络失败可在播放页重试。旧纯文本缓存会过期重查，避免永久阻止同步歌词更新。
+代码以 [MIT License](LICENSE) 开源。截图中的专辑封面、歌词及第三方商标不适用本项目的 MIT 许可，相关权利归各自所有者。Bee 是独立项目，与 Apple 或其他音乐服务没有隶属关系。
