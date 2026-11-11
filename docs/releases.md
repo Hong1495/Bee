@@ -28,10 +28,13 @@ For each release:
    verifies the archive signature before installation. Only darwin-aarch64 is
    advertised; never point an Intel target to this archive.
 
-Automatic checks run three seconds after launch and every six hours when enabled.
+Automatic checks run three seconds after launch and every 30 minutes while visible.
+Returning to the app or reconnecting triggers a check if the last success is over
+five minutes old; failures retry after one minute. Hidden windows defer work.
 Disabling the preference stops scheduled checks; manual checks remain available.
 Checking never installs automatically. The user downloads/installs in the update
-popover, then restarts explicitly. Queue and playback position are saved before
+popover, then restarts explicitly through the original installed bundle path,
+after the old process has exited (no forced new instance). Queue and playback position are saved before
 installation and restart. A failed check or download can be retried.
 
 Updater signatures authenticate Bee update packages. They are distinct from

@@ -4,6 +4,7 @@ mod local;
 mod lyrics;
 mod music;
 mod storage;
+mod restart;
 
 #[derive(Debug, PartialEq)]
 enum ReopenAction {
@@ -133,6 +134,7 @@ fn set_content_backing(
 
 fn main() {
     tauri::Builder::default()
+        .manage(restart::RestartTarget::capture())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(music::MusicBridge::default())
@@ -170,6 +172,7 @@ fn main() {
             set_content_backing,
             titlebar_double_click,
             update_indicator_position,
+            restart::restart_after_update,
             music::music_request,
             music::music_seek,
             local::local_request,
