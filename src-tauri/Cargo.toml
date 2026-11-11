@@ -1,6 +1,6 @@
 [package]
 name = "bee-vinyl"
-version = "0.1.6"
+version = "0.1.7"
 description = "A little space for your records"
 authors = ["Bee"]
 edition = "2021"

@@ -114,7 +114,6 @@ export default function App() {
       viewAnimation.current = layer?.animate([{opacity:.35},{opacity:1}], {duration:170,easing:'cubic-bezier(.22,.75,.2,1)'}) ?? null;
     }
   };
-  const iconPath = '/icons/light.png';
   const notify = (message: string) => setToast(message);
   const dragWindow = (event: MouseEvent<HTMLElement>) => {
     if (!isTauri() || event.button !== 0) return;
@@ -338,7 +337,6 @@ export default function App() {
           </section>
           <UpdateSettings updater={updater} onOpen={()=>setUpdateOpen(true)}/>
           <MediaSettings music={music} onPreferencesChanged={()=>setPreferencesRevision(value=>value+1)}/>
-          <footer className="preferences-about"><img src={iconPath} alt=""/><span>Bee<small>版本 {updater.version}</small></span></footer>
         </div>}
       </div>
       </div>

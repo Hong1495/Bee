@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import ts from 'typescript';
+const exports={};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/preferenceSaveQueue.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,URL});
+const {preferenceSaveQueue,validProviderUrl}=exports;
+const writes=[];let release;
+const save=preferenceSaveQueue(async value=>{writes.push(value);if(value===1)await new Promise(r=>release=r);if(value===2)throw Error('disk full');return value;});
+const first=save(1),failed=save(2).catch(e=>e.message),last=save(3);
+await Promise.resolve();assert.deepEqual(writes,[1]);release();
+assert.equal(await first,1);assert.equal(await failed,'disk full');assert.equal(await last,3);
+await save.idle();assert.deepEqual(writes,[1,2,3]);
+for(const url of ['https://lrclib.net','https://example.com/api'])assert.equal(validProviderUrl(url),true);
+for(const url of ['https://','http://example.com','','https://user:password@example.com'])assert.equal(validProviderUrl(url),false);
+console.log('PASS: preferences save in order, later edits survive failures, pending writes can be awaited on remount, incomplete/unsafe URLs rejected');

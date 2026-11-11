@@ -1,5 +1,5 @@
 import { useEffect,useRef,useState,type CSSProperties } from 'react';
-import { Download,X } from 'lucide-react';
+import { ArrowDown,X } from 'lucide-react';
 import { invoke,isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { useUpdater } from './useUpdater';
@@ -34,7 +34,7 @@ export function UpdateIndicator({updater,open,setOpen}:{updater:Updater;open:boo
  const busy=updater.phase==='downloading'||updater.phase==='installing';
  const percent=updater.progress.total?Math.min(100,Math.round(updater.progress.received/updater.progress.total*100)):null;
  return <>
-  {position&&<button ref={button} className="update-indicator" style={{left:position.left,top:position.top,width:position.size,height:position.size} as CSSProperties} title={`Bee ${updater.update.version} 可更新`} aria-label="查看软件更新" aria-haspopup="dialog" aria-expanded={open} onClick={()=>setOpen(!open)}><Download aria-hidden="true"/></button>}
+  {position&&<button ref={button} className="update-indicator" style={{left:position.left,top:position.top,width:position.size,height:position.size} as CSSProperties} title={`Bee ${updater.update.version} 可更新`} aria-label="查看软件更新" aria-haspopup="dialog" aria-expanded={open} onClick={()=>setOpen(!open)}><ArrowDown aria-hidden="true"/></button>}
   {open&&<div ref={panel} className="update-popover" role="dialog" aria-modal="false" aria-label="软件更新" style={{left:Math.max(12,(position?.left??80)-12),top:(position?.top??20)+(position?.size??12)+12}}>
    <header><strong>Bee {updater.update.version}</strong><button aria-label="关闭更新窗口" onClick={()=>setOpen(false)}><X size={14}/></button></header>
    <p className="update-subtitle">{updater.phase==='ready'?'更新已安装，重启后生效':'有新版本可用'}</p>
