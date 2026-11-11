@@ -143,11 +143,14 @@ fn lrclib(client:&Client,p:&Provider,song:&Song)->Result<Option<Value>,String>{
  }
  if fallback.is_some()||successes>0{Ok(fallback)}else{Err("LRCLIB 暂时不可用".into())}
 }
+fn netease_lyrics(text:&str)->Option<Value>{
+ if timed(text){result(text,"","netease",false)}else{result("",text,"netease",false)}
+}
 fn netease(client:&Client,p:&Provider,song:&Song)->Result<Option<Value>,String>{
  let mut queries=vec![format!("{} {}",song.title,song.artist),song.title.clone()];
  queries.extend(title_variants(&song.title));
  let mut seen=std::collections::HashSet::new();
- let mut successes=0;let mut lyric_failure=false;
+ let mut successes=0;let mut lyric_failure=false;let mut fallback=None;
  for query in queries {
  let mut u=endpoint(&p.url,"/api/search/get")?;
  u.query_pairs_mut().append_pair("s",&query).append_pair("type","1").append_pair("limit","30");
@@ -164,10 +167,14 @@ fn netease(client:&Client,p:&Provider,song:&Song)->Result<Option<Value>,String>{
   if data["code"].as_i64()!=Some(200){lyric_failure=true;continue;}
   {
    // nolyric/uncollected are not reliable proof that a track is instrumental.
-   if let Some(r)=result(data["lrc"]["lyric"].as_str().unwrap_or(""),"","netease",false){return Ok(Some(r));}
+   if let Some(r)=netease_lyrics(data["lrc"]["lyric"].as_str().unwrap_or("")){
+    if !r["synced"].as_str().unwrap_or("").is_empty(){return Ok(Some(r));}
+    if fallback.is_none(){fallback=Some(r);}
+   }
   }
  }
  }
+ if fallback.is_some(){return Ok(fallback);}
  if successes==0||lyric_failure{return Err("网易云歌词查询暂不可用".into());}
  Ok(None)
 }
@@ -212,6 +219,23 @@ pub async fn lyrics_request(app:tauri::AppHandle,song:Song,refresh:Option<bool>)
 #[cfg(test)]
 mod tests{
  use super::*;
+ #[test]fn netease_preserves_plain_lyrics_and_prefers_real_timestamps(){
+  let text="作词 : 作者\n第一行歌词\n\n第二行歌词";
+  let value=netease_lyrics(text).unwrap();assert_eq!(value["plain"],text);assert_eq!(value["synced"],"");assert_eq!(value["instrumental"],false);
+  let lrc="[00:01.00]第一行\n[00:05.00]第二行";
+  let value=netease_lyrics(lrc).unwrap();assert_eq!(value["synced"],lrc);assert_eq!(value["plain"],"");
+  assert_eq!(netease_lyrics("纯音乐，请欣赏").unwrap()["instrumental"],true);
+  assert!(netease_lyrics("").is_none());
+ }
+ #[test]
+ #[ignore = "Requires provider network access"]
+ fn reliance_preserves_provider_plain_lyrics(){
+  let client=Client::builder().timeout(Duration::from_secs(8)).user_agent("Bee/0.1").build().unwrap();
+  let p=Provider{kind:"netease".into(),enabled:true,url:"https://music.163.com".into()};
+  let s=Song{title:"依赖".into(),artist:"叶倩文".into(),album:"烛光".into(),duration:262.16};
+  let value=netease(&client,&p,&s).unwrap().expect("matched local recording");
+  assert!(value["plain"].as_str().unwrap().len()>100||timed(value["synced"].as_str().unwrap()));assert_eq!(value["instrumental"],false);
+ }
  #[test]fn cached_timed_lyrics_survive_placeholder_migration(){
   let text="[00:01.00]One\n[00:05.00]Two";
   let value=cached_result(&json!({"synced":text,"plain":"","source":"netease","instrumental":false})).unwrap();
