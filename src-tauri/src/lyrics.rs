@@ -22,6 +22,33 @@ fn artist_key(value:&str)->String {
   _=>key,
  }
 }
+// Only digit-by-digit runs are interchangeable (一九四三 / 1943).
+// Do not reinterpret words such as 一生 or positional numerals such as 十七.
+fn digit(c:char)->Option<u32>{
+ c.to_digit(10).or_else(||"０１２３４５６７８９".chars().position(|n|n==c).map(|n|n as u32))
+  .or_else(||"〇一二三四五六七八九".chars().position(|n|n==c).map(|n|n as u32))
+  .or_else(||if c=='零'{Some(0)}else{None})
+}
+fn numeric_title(value:&str,chinese:bool)->String{
+ let chars:Vec<_>=value.chars().collect();let mut output=String::new();let mut i=0;
+ while i<chars.len(){
+  if digit(chars[i]).is_none(){output.push(chars[i]);i+=1;continue;}
+  let start=i;while i<chars.len()&&digit(chars[i]).is_some(){i+=1;}
+  // Single full-width Arabic digits are safe; isolated Chinese digits are not.
+  let unit=|c:char|"十百千万億亿萬".contains(c);
+  let positional=(start>0&&unit(chars[start-1]))||(i<chars.len()&&unit(chars[i]));
+  let convert=!positional&&(i-start>=2||chars[start].is_ascii_digit()||('０'..='９').contains(&chars[start]));
+  for c in &chars[start..i]{if convert{let n=digit(*c).unwrap() as usize;output.push(if chinese{"〇一二三四五六七八九".chars().nth(n).unwrap()}else{char::from(b'0'+n as u8)});}else{output.push(*c);}}
+ }
+ output
+}
+fn title_variants(value:&str)->Vec<String>{
+ let mut variants=Vec::new();
+ for variant in [numeric_title(value,false),numeric_title(value,true)]{
+  if variant!=value&&!variants.contains(&variant){variants.push(variant);}
+ }
+ variants
+}
 // Only remove release/mastering annotations. Live, remix and cover identity
 // must survive normalization, even when a provider puts it in parentheses.
 fn title_key(value:&str)->String {
@@ -35,7 +62,7 @@ fn title_key(value:&str)->String {
   }
  }
  if let Some(start)=text.rfind(" - "){if text[start..].contains("remaster"){text.truncate(start);}}
- normalized(&text)
+ normalized(&numeric_title(&text,false))
 }
 fn score(song:&Song,title:&str,artists:&[String],album:&str,duration:f64)->Option<f64>{
  if title_key(&song.title)!=title_key(title)||song.title.trim().is_empty(){return None;}
@@ -80,9 +107,12 @@ fn lrclib(client:&Client,p:&Provider,song:&Song)->Result<Option<Value>,String>{
  let mut successes=usize::from(exact.is_ok());
  // First search is precise. A title-only query recovers records indexed under
  // the artist's English/localized name; candidates still pass identity checks.
- for broad in [false,true]{
+ let variants=title_variants(&song.title);
+ let mut searches=vec![(song.title.as_str(),false),(song.title.as_str(),true)];
+ searches.extend(variants.iter().map(|title|(title.as_str(),true)));
+ for (title,broad) in searches{
   let mut u=endpoint(&p.url,"/api/search")?;
-  if broad {u.query_pairs_mut().append_pair("q",&song.title);}else{u.query_pairs_mut().append_pair("track_name",&song.title).append_pair("artist_name",&song.artist);}
+  if broad {u.query_pairs_mut().append_pair("q",title);}else{u.query_pairs_mut().append_pair("track_name",title).append_pair("artist_name",&song.artist);}
   let search=get(client,u);if search.is_ok(){successes+=1;}
   if let Ok(Some(data))=&search{
    let mut candidates:Vec<_>=data.as_array().into_iter().flatten().filter_map(|v|score(song,v["trackName"].as_str().unwrap_or(""),&[v["artistName"].as_str().unwrap_or("").into()],v["albumName"].as_str().unwrap_or(""),v["duration"].as_f64().unwrap_or(0.0)).map(|s|(s,v))).collect();
@@ -93,21 +123,31 @@ fn lrclib(client:&Client,p:&Provider,song:&Song)->Result<Option<Value>,String>{
  if fallback.is_some()||successes>0{Ok(fallback)}else{Err("LRCLIB 暂时不可用".into())}
 }
 fn netease(client:&Client,p:&Provider,song:&Song)->Result<Option<Value>,String>{
+ let mut queries=vec![format!("{} {}",song.title,song.artist),song.title.clone()];
+ queries.extend(title_variants(&song.title));
+ let mut seen=std::collections::HashSet::new();
+ let mut successes=0;let mut lyric_failure=false;
+ for query in queries {
  let mut u=endpoint(&p.url,"/api/search/get")?;
- u.query_pairs_mut().append_pair("s",&format!("{} {}",song.title,song.artist)).append_pair("type","1").append_pair("limit","30");
- let Some(data)=get(client,u)? else{return Ok(None)};
- if data["code"].as_i64()!=Some(200){return Err("网易云歌词搜索暂不可用".into());}
+ u.query_pairs_mut().append_pair("s",&query).append_pair("type","1").append_pair("limit","30");
+ let Ok(Some(data))=get(client,u) else{continue};
+ if data["code"].as_i64()!=Some(200){continue;}
+ successes+=1;
  let mut candidates:Vec<_>=data["result"]["songs"].as_array().into_iter().flatten().filter_map(|v|{
   let artists:Vec<_>=v["artists"].as_array().into_iter().flatten().filter_map(|a|a["name"].as_str().map(str::to_owned)).collect();
   score(song,v["name"].as_str().unwrap_or(""),&artists,v["album"]["name"].as_str().unwrap_or(""),v["duration"].as_f64().unwrap_or(0.0)/1000.0).and_then(|s|v["id"].as_u64().map(|id|(s,id)))
  }).collect();candidates.sort_by(|a,b|b.0.total_cmp(&a.0));
- for (_,id) in candidates.into_iter().take(2){
+ for (_,id) in candidates.into_iter().filter(|(_,id)|seen.insert(*id)).take(2){
   let mut u=endpoint(&p.url,"/api/song/lyric")?;u.query_pairs_mut().append_pair("id",&id.to_string()).append_pair("lv","-1").append_pair("kv","-1").append_pair("tv","-1");
-  if let Some(data)=get(client,u)? {if data["code"].as_i64()!=Some(200){return Err("网易云歌词暂不可用".into());}
+  let data=match get(client,u){Ok(Some(data))=>data,Ok(None)=>continue,Err(_)=>{lyric_failure=true;continue;}};
+  if data["code"].as_i64()!=Some(200){lyric_failure=true;continue;}
+  {
    // nolyric/uncollected are not reliable proof that a track is instrumental.
    if let Some(r)=result(data["lrc"]["lyric"].as_str().unwrap_or(""),"","netease",false){return Ok(Some(r));}
   }
  }
+ }
+ if successes==0||lyric_failure{return Err("网易云歌词查询暂不可用".into());}
  Ok(None)
 }
 fn fetch(client:&Client,p:&Provider,song:&Song)->Result<Option<Value>,String>{
@@ -122,7 +162,7 @@ pub async fn lyrics_request(app:tauri::AppHandle,song:Song,refresh:Option<bool>)
  tauri::async_runtime::spawn_blocking(move||{
   if song.title.len()>4096||song.artist.len()>4096||song.album.len()>4096||!song.duration.is_finite(){return Err("歌曲信息无效".into());}
   let prefs=storage::preferences(&app);if !prefs.lyrics_enabled{return Ok(json!({"disabled":true}));}
-  let key=format!("{:x}",Sha256::digest(serde_json::to_vec(&(4,&song,&prefs.providers)).unwrap()));
+  let key=format!("{:x}",Sha256::digest(serde_json::to_vec(&(5,&song,&prefs.providers)).unwrap()));
   let path=storage::cache(&app)?.join("lyrics-v1").join(format!("{key}.json"));
   {let _gate=storage::CACHE_LOCK.lock().map_err(|_|"缓存不可用")?;
    if !refresh.unwrap_or(false){if let Ok(bytes)=std::fs::read(&path){if let Ok(value)=serde_json::from_slice::<Value>(&bytes){let ttl=if value["synced"].as_str().is_some_and(|s|!s.is_empty()){30*86400}else{3600};if std::fs::metadata(&path).ok().and_then(|m|m.modified().ok()).and_then(|t|t.elapsed().ok()).is_some_and(|age|age.as_secs()<ttl){return Ok(value);}}}}
@@ -144,6 +184,35 @@ pub async fn lyrics_request(app:tauri::AppHandle,song:Song,refresh:Option<bool>)
 #[cfg(test)]
 mod tests{
  use super::*;
+ #[test]fn numeric_title_compatibility_keeps_recording_identity(){
+  let s=Song{title:"上海1943".into(),artist:"Jay Chou".into(),album:"范特西".into(),duration:195.812426};
+  assert!(score(&s,"上海一九四三",&["周杰伦".into()],"范特西",196.0).is_some());
+  assert_eq!(title_key("上海１９４３"),title_key("上海一九四三"));
+  assert_eq!(title_key("二〇〇〇"),title_key("2000"));
+  assert_eq!(title_key("二零零零"),title_key("2000"));
+  assert_eq!(numeric_title("上海1943",true),"上海一九四三");
+  assert_eq!(title_variants("上海一九四三"),vec!["上海1943"]);
+  assert_eq!(title_variants("上海1943"),vec!["上海一九四三"]);
+  assert!(title_variants("一生所爱").is_empty());
+  assert_ne!(title_key("一生所爱"),title_key("1生所爱"));
+  assert_ne!(title_key("十七岁"),title_key("17岁"));
+  assert_ne!(title_key("上海1943"),title_key("上海1944"));
+  assert!(score(&s,"上海一九四三 (Live)",&["周杰伦".into()],"范特西",196.0).is_none());
+  assert!(score(&s,"上海一九四三",&["施艾敏".into()],"范特西",196.0).is_none());
+  assert!(score(&s,"上海一九四三",&["周杰伦".into()],"范特西",209.0).is_none());
+ }
+ #[test]
+ #[ignore = "Requires provider network access"]
+ fn shanghai_numeric_title_finds_timed_lyrics_in_both_sources(){
+  let client=Client::builder().timeout(Duration::from_secs(8)).user_agent("Bee/0.1").build().unwrap();
+  let s=Song{title:"上海1943".into(),artist:"Jay Chou".into(),album:"范特西".into(),duration:195.812426};
+  for (kind,url) in [("lrclib","https://lrclib.net"),("netease","https://music.163.com")] {
+   let p=Provider{kind:kind.into(),enabled:true,url:url.into()};
+   let value=fetch(&client,&p,&s).unwrap().expect(kind);
+   assert!(timed(value["synced"].as_str().unwrap()),"{kind}");
+   assert_eq!(value["source"],kind);
+  }
+ }
  fn song()->Song{Song{title:"父亲".into(),artist:"筷子兄弟".into(),album:"父亲".into(),duration:300.0}}
  #[test]fn reject_wrong_artist_version_and_duration(){let s=song();assert!(score(&s,"父亲",&["筷子兄弟".into()],"精选",302.0).is_some());assert!(score(&s,"父亲",&["翻唱者".into()],"父亲",300.0).is_none());assert!(score(&s,"父亲 (Live)",&["筷子兄弟".into()],"父亲",300.0).is_none());assert!(score(&s,"父亲",&["筷子兄弟".into()],"父亲",320.0).is_none());}
  #[test]fn release_annotation_is_not_recording_identity(){assert_eq!(title_key("Yesterday (2015 Remaster)"),title_key("Yesterday"));assert_eq!(title_key("父亲（重制版）"),title_key("父亲"));assert_ne!(title_key("父亲（现场版）"),title_key("父亲"));assert_ne!(title_key("Yesterday (Live)"),title_key("Yesterday"));assert_eq!(title_key("Don't Stop!"),title_key("Don’t Stop"));}

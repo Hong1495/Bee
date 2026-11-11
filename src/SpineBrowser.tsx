@@ -3,6 +3,7 @@ import { Artwork } from './Artwork';
 import { memo, forwardRef, useImperativeHandle, useState, useLayoutEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
 import type { Album } from './data';
 import { lowerBound, nearestShelfSlot } from './shelfPositions';
+import {useArtworkPalette} from './useArtworkPalette';
 
 export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initialScroll, onScrollPosition, renderArtwork }: { albums: Album[]; onOpen: (album: Album) => void; initialScroll?: number; onScrollPosition?: (position: number) => void; renderArtwork?:(album:Album,className:string)=>ReactNode }) {
   const caption = useRef<{show:(album:Album|null)=>void}>(null);
@@ -226,11 +227,17 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
         }}>
         <span className="crate-sleeve">
           <span className="crate-cover" data-album-art={album.id}>{renderArtwork?<>{renderArtwork(album,'crate-front')}{renderArtwork(album,'crate-back')}</>:<><Artwork className="crate-front" album={album} alt="" draggable={false}/><Artwork className="crate-back" album={album} alt="" draggable={false}/></>}</span>
-          <span className="crate-spine"><strong>{album.title}</strong><span>{album.artist}</span></span>
+          <SleeveSpine album={album}/>
         </span>
       </button>)}
     </div>
   </div><AlbumCaption ref={caption}/></div>;
+});
+
+const SleeveSpine=memo(function SleeveSpine({album}:{album:Album}){
+ const covers='covers' in album?album.covers as Album[]:undefined;
+ const palette=useArtworkPalette(covers?.[0]?.id??album.id);
+ return <span className="crate-spine" style={{'--sleeve-color':palette.edge??palette.paper,'--sleeve-ink':palette.edgeInk??palette.ink} as CSSProperties}><strong>{album.title}</strong><span>{album.artist}</span></span>;
 });
 
 // Isolate hover text updates from the potentially large sleeve tree.

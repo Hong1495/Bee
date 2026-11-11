@@ -33,6 +33,7 @@ import { ToolbarSearch } from './ToolbarSearch';
 import { SortMenu } from './SortMenu';
 
 import {createNavigationHistory} from './navigationHistory';
+import {suppressBrowserMenu} from './contextMenu';
 
 type Page = 'library' | 'artists' | 'playlists' | 'playing' | 'settings';
 type Location = {page:Page;albumId:string;playlist:string;artist:string;query:string;view:'grid'|'spines';sort:string;scroll:number;spine?:number};
@@ -318,7 +319,7 @@ export default function App() {
     { page: 'playlists', label: '播放列表', icon: <ListMusic size={19}/> },
   ];
 
-  return <div style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties} className={`app native-redesign ${visible ? '' : 'app-hidden'} ${sidebarOpen ? '' : 'sidebar-collapsed'} ${page === 'artists' ? 'three-column' : ''}`}>
+  return <div onContextMenu={suppressBrowserMenu} style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties} className={`app native-redesign ${visible ? '' : 'app-hidden'} ${sidebarOpen ? '' : 'sidebar-collapsed'} ${page === 'artists' ? 'three-column' : ''}`}>
     {playlistDialog&&<PlaylistDialog state={playlistDialog} lists={customLists} onSave={saveListDialog} onClose={()=>setPlaylistDialog(null)}/>}
     {addingSongs&&activeList?.managed&&<PlaylistSongs albums={albums} existing={playlistIds} onClose={()=>setAddingSongs(false)} onSave={ids=>music.editPlaylist({operation:'add',id:playlist,trackIds:ids})}/>}
     <UpdateIndicator updater={updater} open={updateOpen} setOpen={setUpdateOpen}/>

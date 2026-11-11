@@ -630,3 +630,36 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,.native-redesign::-webkit-scroll
 .playlist-detail-header .playlist-artists { font-size:14px; line-height:1.5; font-weight:500; color:var(--text); margin:0 0 8px; overflow-wrap:anywhere; }
 .playlist-detail-header .playlist-summary { font-size:12px; line-height:1.6; color:var(--muted); margin:0; }
 .playlist-detail-info .detail-actions { margin-top:18px; }
+
+/* Preserve the original artwork; the empty part of its square uses sampled
+   paper colour rather than a theme-wide black/white mat. Collage tiles retain
+   their existing crop because their slots intentionally have different ratios. */
+.native-redesign img.artwork-image { object-fit:contain; background:var(--artwork-edge,#d5d2c9); }
+[data-theme=dark] .native-redesign img.artwork-image { background:var(--artwork-edge-dark,var(--artwork-edge,#494741)); }
+.native-redesign .playlist-artwork.tiles-2>img,
+.native-redesign .playlist-artwork.tiles-3>img,
+.native-redesign .playlist-artwork.tiles-4>img { object-fit:cover; }
+
+/* Dark materials share a quiet room light. Keep photographs untouched. */
+[data-theme=dark] .native-redesign .vinyl {
+ background:radial-gradient(circle closest-side,transparent 0 96.5%,#1a1b1e 97% 100%),
+ repeating-radial-gradient(circle closest-side,#17181a 0 1px,#2c2d31 1px 1.5px,#1d1e21 1.5px 3px);
+ border-color:#303136; box-shadow:inset 0 0 0 .5px #ffffff0b;
+}
+[data-theme=dark] .native-redesign .vinyl-glint { opacity:.88; }
+[data-theme=dark] .native-redesign .vinyl-grain { opacity:.52; }
+[data-theme=dark] .native-redesign .peek-record .vinyl-glint { opacity:.76; }
+[data-theme=dark] .native-redesign .peek-record .vinyl-grain { opacity:.35; }
+[data-theme=dark] .record-stage .arm-base { background:radial-gradient(circle,#666a70 18%,#b8bcc2 22%,#7a7e85 36%,#c8cbd0 40%,#797d85 70%); }
+[data-theme=dark] .record-stage .arm-shaft { background:linear-gradient(90deg,#666b72,#cbd0d5 38%,#a6acb3 65%,#636971); }
+[data-theme=dark] .record-stage .arm-head { background:linear-gradient(90deg,#858b93,#c8cdd3 42%,#969da5); }
+[data-theme=dark] .record-stage .tonearm { filter:drop-shadow(2px 4px 2px #0003); }
+[data-theme=dark] .native-redesign .album-cover,
+[data-theme=dark] .native-redesign .album-card:hover .album-cover { box-shadow:0 2px 5px #00000024,0 0 0 .5px #ffffff0d; }
+[data-theme=dark] .minimal-deck .stage-sleeve { background:transparent; box-shadow:0 1px 2px #0002,2px 5px 10px #0002; }
+[data-theme=dark] .minimal-deck .stage-sleeve::after { box-shadow:inset 0 0 0 .5px #ffffff0b; }
+[data-theme=dark] .crate-cover img,
+[data-theme=dark] .playlist-crate .crate-cover>.playlist-artwork { box-shadow:0 1px 2px #0003,0 0 0 .5px #ffffff0b; }
+[data-theme=dark] .crate-spine,
+[data-theme=dark] .playlist-crate .crate-spine { box-shadow:inset .5px 0 #ffffff24,inset -.5px 0 #0003,2px 1px 3px #0002; }
+[data-theme=dark] .playlist-card .album-art::before { background:#45464b; border-color:#ffffff08; }

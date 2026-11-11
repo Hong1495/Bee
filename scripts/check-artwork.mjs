@@ -42,3 +42,12 @@ const coloured = paletteModule.paletteFromPixels([...solid(255,255,255,70),...so
 assert.equal(coloured.paper,paletteModule.paletteFromPixels(solid(40,90,160)).paper);
 assert.equal(paletteModule.readRecordPalette('missing'),paletteModule.defaultPalette);
 console.log('PASS: label palette ignores transparency, handles blank images, preserves cover hue through white margins and chooses light/dark ink');
+// Edge sampling must follow the paper surrounding a face, not its centre.
+const square=Array.from({length:32*32},(_,i)=>{const x=i%32,y=Math.floor(i/32);return x<3||x>=29||y<3||y>=29?[40,90,160,255]:[230,170,120,255];}).flat();
+const edge=paletteModule.edgePalette(square,32,32);
+assert.equal(edge.edge,'rgb(43,90,156)');assert.equal(edge.edgeInk,'#fffdf5');
+assert.notEqual(edge.edgeDark,edge.edge);
+assert.equal(Object.keys(paletteModule.edgePalette(new Array(32*32*4).fill(0),32,32)).length,0);
+assert.equal(paletteModule.edgePalette(solid(245,245,245,32*32),32,32).edgeInk,'#171715');
+assert.equal(paletteModule.edgePalette(solid(0,0,0,32*32),32,32).edge,'rgb(0,0,0)');
+console.log('PASS: edge colour ignores central portraits, skips transparent pixels, preserves original black/white edges and derives legible spine ink');
