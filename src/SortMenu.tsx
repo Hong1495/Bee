@@ -1,12 +1,15 @@
+import { t, useLanguage } from './i18n';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowDownWideNarrow, Check } from 'lucide-react';
 import { isTauri } from '@tauri-apps/api/core';
 import { Menu, CheckMenuItem } from '@tauri-apps/api/menu';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
 
-const choices = [{ id:'added', text:'添加日期' }, { id:'title', text:'专辑名称' }, { id:'year', text:'发行年份' }];
+
 
 export function SortMenu({ value, onChange }: { value:string; onChange:(value:string) => void }) {
+  useLanguage();
+  const choices = [{ id:'added', text:t("添加日期") }, { id:'title', text:t("专辑名称") }, { id:'year', text:t("发行年份") }];
   const button = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLDivElement>(null);
   const nativeMenu = useRef<Menu | null>(null);
@@ -34,8 +37,8 @@ export function SortMenu({ value, onChange }: { value:string; onChange:(value:st
     } catch { setOpen(true); }
   };
   return <div className="sort-menu-anchor" onMouseDown={event => event.stopPropagation()}>
-    <button ref={button} type="button" className="icon-button toolbar-sort" aria-label="专辑排序" aria-haspopup="menu"
-      title={`排序：${choices.find(choice => choice.id === value)?.text}`} onClick={() => void show()}><ArrowDownWideNarrow size={17}/></button>
+    <button ref={button} type="button" className="icon-button toolbar-sort" aria-label={t("专辑排序")} aria-haspopup="menu"
+      title={t("排序：{0}", choices.find(choice => choice.id === value)?.text)} onClick={() => void show()}><ArrowDownWideNarrow size={17}/></button>
     {open && <div ref={popup} role="menu" className="sort-popup" onKeyDown={event => {
       if (event.key === 'Escape') { event.stopPropagation(); setOpen(false); button.current?.focus(); }
       if (event.key === 'Tab') setOpen(false);

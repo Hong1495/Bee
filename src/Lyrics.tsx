@@ -1,3 +1,4 @@
+import { t, useLanguage } from './i18n';
 import { memo,useEffect,useLayoutEffect,useMemo,useRef,useState,type RefObject } from 'react';
 import { invoke,isTauri } from '@tauri-apps/api/core';
 import type { MusicTrack } from './data';
@@ -5,6 +6,7 @@ import type { PlaybackPosition } from './useMusic';
 import { parseLrc,lyricIndex } from './parseLyrics';
 type Result={synced:string;plain:string;source:string;instrumental:boolean;disabled?:boolean};
 export const Lyrics = memo(function Lyrics({track,position,revision,refreshToken}:{track:MusicTrack;position:RefObject<PlaybackPosition>;revision:number;refreshToken:number}){
+  useLanguage();
  const consumedRefresh=useRef(refreshToken);
  const [status,setStatus]=useState<'loading'|'missing'|'error'|'ready'>('loading');
  const [result,setResult]=useState<Result|null>(null);const [index,setIndex]=useState(-1);const [expanded,setExpanded]=useState(false);
@@ -23,6 +25,6 @@ export const Lyrics = memo(function Lyrics({track,position,revision,refreshToken
   return()=>observer.disconnect();
  },[lines,index]);
  if(status!=='ready'||!result||result.disabled||result.instrumental)return <div className="lyrics-space" aria-hidden="true"/>;
- if(!lines.length)return <div className="lyrics-plain"><button className="text-button" onClick={()=>setExpanded(v=>!v)} aria-expanded={expanded}>歌词 · 无时间轴</button>{expanded&&<div className="plain-lyrics" tabIndex={0}>{result.plain}</div>}</div>;
- return <div className="synced-lyrics" aria-label="同步歌词"><div ref={rail} className="lyrics-track" style={{transform:`translateY(${offset}px)`}}>{lines.map((line,i)=><p key={`${line.time}-${i}`} className={i===index?'lyric-current':''} style={{opacity:i===index?1:Math.abs(i-index)===1?.48:0}}><span>{line.text||'♪'}</span></p>)}</div></div>;
+ if(!lines.length)return <div className="lyrics-plain"><button className="text-button" onClick={()=>setExpanded(v=>!v)} aria-expanded={expanded}>{t("歌词 · 无时间轴")}</button>{expanded&&<div className="plain-lyrics" tabIndex={0}>{result.plain}</div>}</div>;
+ return <div className="synced-lyrics" aria-label={t("同步歌词")}><div ref={rail} className="lyrics-track" style={{transform:`translateY(${offset}px)`}}>{lines.map((line,i)=><p key={`${line.time}-${i}`} className={i===index?'lyric-current':''} style={{opacity:i===index?1:Math.abs(i-index)===1?.48:0}}><span>{line.text||'♪'}</span></p>)}</div></div>;
 });

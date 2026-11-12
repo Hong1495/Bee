@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { useCallback,useEffect,useRef,useState } from 'react';
 import { invoke,isTauri } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
@@ -24,7 +25,7 @@ export function useUpdater(){
    const old=resource.current;resource.current=next;setUpdate(next);setChecked(true);setPhase(next?'available':'idle');
    await old?.close();
    return true;
-  }catch(e){if(mounted.current){setError(`检查更新失败：${String(e)}`);setPhase('error');}return false;}
+  }catch(e){if(mounted.current){setError(t("检查更新失败：{0}", String(e)));setPhase('error');}return false;}
   finally{busy.current=false;}
  },[]);
  useEffect(()=>{
@@ -50,9 +51,9 @@ export function useUpdater(){
    // Persist the exact current queue/position before the updater replaces files.
    window.dispatchEvent(new Event('bee-before-update'));
    await next.install();installed.current=true;setPhase('ready');
-  }catch(e){setError(`更新失败：${String(e)}`);setPhase('error');}
+  }catch(e){setError(t("更新失败：{0}", String(e)));setPhase('error');}
   finally{busy.current=false;}
  },[]);
- const restart=useCallback(async()=>{try{window.dispatchEvent(new Event('bee-before-update'));await invoke('restart_after_update');}catch(e){setError(`重启失败，请退出后重新打开 Bee：${String(e)}`);}},[]);
+ const restart=useCallback(async()=>{try{window.dispatchEvent(new Event('bee-before-update'));await invoke('restart_after_update');}catch(e){setError(t("重启失败，请退出后重新打开 Bee：{0}", String(e)));}},[]);
  return {automatic,setAutomatic,version,update,phase,error,checked,progress,checkNow,install,restart};
 }

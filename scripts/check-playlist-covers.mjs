@@ -1,5 +1,6 @@
+import {i18n} from './i18n-test-loader.mjs';
 import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';import ts from 'typescript';
-const load=file=>{const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,{exports});return exports;};
+const load=file=>{const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,{exports,require:id=>{assert.equal(id,'./i18n');return i18n;}});return exports;};
 const {playlistCover}=load('src/playlistCovers.ts'),{fallbackArtwork}=load('src/fallbackArtwork.ts');
 const byTrack=new Map([['a',{id:'album-a'}],['b',{id:'album-a'}],['c',{id:'album-c'}],['d',{id:'album-d'}],['e',{id:'album-e'}],['f',{id:'album-f'}]]);
 const result=playlistCover({id:'list',name:'List'},['a','b','missing','c','d','e','f'],byTrack);

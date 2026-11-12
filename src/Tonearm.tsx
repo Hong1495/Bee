@@ -1,3 +1,4 @@
+import { t, useLanguage } from './i18n';
 import { memo, useEffect, useRef, type RefObject } from 'react';
 import type { PlaybackPosition } from './useMusic';
 
@@ -16,6 +17,7 @@ export function tonearmAngle(progress:number) {
 export const Tonearm = memo(function Tonearm({ playing, trackId, position, onToggle }: {
   playing:boolean; trackId:string; position:RefObject<PlaybackPosition>; onToggle:() => void;
 }) {
+  useLanguage();
   const ref = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     let frame = 0;
@@ -37,8 +39,8 @@ export const Tonearm = memo(function Tonearm({ playing, trackId, position, onTog
     return () => { cancelAnimationFrame(frame); document.removeEventListener('visibilitychange',visibility); };
   }, [position,trackId,playing]);
   return <button ref={ref} type="button" className={`tonearm ${playing ? 'engaged' : ''}`}
-    aria-label={playing ? '点击唱臂暂停' : '点击唱臂播放'} aria-pressed={playing}
-    title={playing ? '抬起唱臂，暂停' : '放下唱臂，播放'} onClick={onToggle}>
+    aria-label={playing ? t("点击唱臂暂停") : t("点击唱臂播放")} aria-pressed={playing}
+    title={playing ? t("抬起唱臂，暂停") : t("放下唱臂，播放")} onClick={onToggle}>
     <span className="arm-base"/><span className="arm-shaft"/><span className="arm-head"/>
   </button>;
 });

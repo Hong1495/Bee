@@ -76,3 +76,18 @@ cargo test --manifest-path src-tauri/Cargo.toml
 | `public/sounds/` | 原创提示音素材 |
 | `scripts/` | 资源生成及回归检查 |
 
+
+
+### Interface languages
+
+Settings offers Simplified Chinese (default), Traditional Chinese, English and
+Japanese. `src/i18n.ts` keeps the `bee-language` preference independently of music
+library data and updates subscribed components without remounting playback.
+Catalogs in `src/locales/` use Simplified Chinese source messages and numbered
+placeholders. Translate at render/callback time; include language in memoized
+UI summaries. Never translate track metadata, user playlist names or library IDs.
+Bee's custom native Settings/Check for Updates actions and folder picker title
+follow the preference. Standard macOS menus/permission dialogs, remote release
+notes and raw backend/third-party diagnostic details retain their source language.
+`npm run check` includes catalog coverage, placeholder integrity, switching,
+persistence and locale fallback checks.

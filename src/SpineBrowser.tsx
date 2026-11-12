@@ -1,3 +1,4 @@
+import { t, useLanguage } from './i18n';
 import { playUISound } from './uiSounds';
 import { Artwork } from './Artwork';
 import { memo, forwardRef, useImperativeHandle, useState, useLayoutEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
@@ -6,6 +7,7 @@ import { lowerBound, nearestShelfSlot } from './shelfPositions';
 import {useArtworkPalette} from './useArtworkPalette';
 
 export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initialScroll, onScrollPosition, renderArtwork }: { albums: Album[]; onOpen: (album: Album) => void; initialScroll?: number; onScrollPosition?: (position: number) => void; renderArtwork?:(album:Album,className:string)=>ReactNode }) {
+  useLanguage();
   const caption = useRef<{show:(album:Album|null)=>void}>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const travel = useRef<(position: number) => void>(() => {});
@@ -197,7 +199,7 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
     };
   }, [albumKey]);
 
-  return <div className={`crate-layout ${renderArtwork?'playlist-crate':''}`}><div className="crate-browser" ref={viewport} aria-label="立体唱片架" onPointerLeave={()=>caption.current?.show(null)} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node))caption.current?.show(null);}}>
+  return <div className={`crate-layout ${renderArtwork?'playlist-crate':''}`}><div className="crate-browser" ref={viewport} aria-label={t("立体唱片架")} onPointerLeave={()=>caption.current?.show(null)} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node))caption.current?.show(null);}}>
     <div className="crate-stack">
       {albums.map((album, index) => <button type="button" className="crate-item" key={album.id}
         onFocus={()=>caption.current?.show(album)}
@@ -209,7 +211,7 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
           }
         }}
         style={{ '--sleeve-color': album.color, '--sleeve-ink': album.ink } as CSSProperties}
-        aria-label={`查看 ${album.title}`} onClick={event => {
+        aria-label={t("查看 {0}", album.title)} onClick={event => {
           if (suppressClick.current && event.detail !== 0) { suppressClick.current = false; return; }
           onOpen(album);
         }}
@@ -235,6 +237,7 @@ export const SpineBrowser = memo(function SpineBrowser({ albums, onOpen, initial
 });
 
 const SleeveSpine=memo(function SleeveSpine({album}:{album:Album}){
+  useLanguage();
  const covers='covers' in album?album.covers as Album[]:undefined;
  const palette=useArtworkPalette(covers?.[0]?.id??album.id);
  return <span className="crate-spine" style={{'--sleeve-color':palette.edge??palette.paper,'--sleeve-ink':palette.edgeInk??palette.ink} as CSSProperties}><strong>{album.title}</strong><span>{album.artist}</span></span>;
@@ -242,6 +245,7 @@ const SleeveSpine=memo(function SleeveSpine({album}:{album:Album}){
 
 // Isolate hover text updates from the potentially large sleeve tree.
 const AlbumCaption = forwardRef<{show:(album:Album|null)=>void}>(function AlbumCaption(_,ref){
+  useLanguage();
  const [album,setAlbum]=useState<Album|null>(null);
  useImperativeHandle(ref,()=>({show:setAlbum}),[]);
  return <div className={`crate-caption ${album?'visible':''}`} aria-live="polite" aria-atomic="true">

@@ -1,3 +1,4 @@
+import { t, useLanguage } from './i18n';
 import { useEffect, useRef, useState } from 'react';
 
 // Reserve the native traffic lights, update dot and three window controls.
@@ -6,6 +7,7 @@ export const SIDEBAR_MAX = 320;
 export const clampSidebar = (width: number) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Number.isFinite(width) ? width : 220));
 
 export function SidebarDivider({ width, onChange, onPreview }: { width: number; onChange: (width: number) => void; onPreview?: (width: number) => void }) {
+  useLanguage();
   const [dragging, setDragging] = useState(false);
   const drag = useRef<{ x: number; width: number } | null>(null);
   const frame = useRef(0);
@@ -28,9 +30,9 @@ export function SidebarDivider({ width, onChange, onPreview }: { width: number; 
     document.documentElement.classList.add('resizing-sidebar');
     return () => document.documentElement.classList.remove('resizing-sidebar');
   }, [dragging]);
-  return <div ref={element} className="sidebar-divider" role="separator" aria-label="侧栏宽度" aria-orientation="vertical"
+  return <div ref={element} className="sidebar-divider" role="separator" aria-label={t("侧栏宽度")} aria-orientation="vertical"
     aria-valuemin={SIDEBAR_MIN} aria-valuemax={SIDEBAR_MAX} aria-valuenow={width} tabIndex={0}
-    title="拖动调整侧栏宽度，双击恢复默认"
+    title={t("拖动调整侧栏宽度，双击恢复默认")}
     onPointerDown={event => {
       if (event.button !== 0) return;
       event.preventDefault();

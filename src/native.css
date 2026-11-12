@@ -693,3 +693,11 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,.native-redesign::-webkit-scroll
 .native-redesign.sidebar-peeking>.sidebar>.window-chrome { display:none; }
 @keyframes sidebar-peek-in { from { opacity:0; transform:translateX(-6px); } to { opacity:1; transform:translateX(0); } }
 @media(prefers-reduced-motion:reduce) { .native-redesign.sidebar-peeking>.sidebar { animation:none; } }
+
+/* Let translated controls wrap within compact preferences instead of clipping. */
+.preferences-page .preference-row { flex-wrap:wrap; }
+.preferences-page .preference-row>span:first-child { min-width:0; }
+.preferences-page .setting-actions { flex-wrap:wrap; justify-content:flex-end; margin-left:auto; }
+.preferences-page .appearance-picker { flex-shrink:0; margin-left:auto; }
+.preferences-page .setting-detail { white-space:normal; }
+.preferences-page #interface-language { min-width:140px; margin-left:auto; }

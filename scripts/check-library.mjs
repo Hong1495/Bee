@@ -1,3 +1,4 @@
+import {i18n} from './i18n-test-loader.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -30,7 +31,7 @@ if(command==='local_request'){if(['scan','add','remove'].includes(args.operation
  if(args.operation==='library')return {tracks:musicTracks,playlists:[{id:'playlist',name:'List'}]};if(args.operation==='playlist')return musicTracks.map(t=>t.id).reverse();if(args.operation==='status')return musicStatus;return {};};
 const data=load('src/data.ts');
 const session=load('src/playbackSession.ts');
-hook=load('src/useMusic.ts',name=>name==='react'?React:name.includes('/core')?{invoke,isTauri:()=>true}:name==='./data'?data:name==='./playbackSession'?session:{resetArtworkSession(){}}).useMusic;
+hook=load('src/useMusic.ts',name=>name==='./i18n'?i18n:name==='react'?React:name.includes('/core')?{invoke,isTauri:()=>true}:name==='./data'?data:name==='./playbackSession'?session:{resetArtworkSession(){}}).useMusic;
 const render=()=>{cursor=0;effects=[];result=hook();};render();await result.connect();render();
 assert.equal(result.albums.length,1);assert.equal(result.albums[0].tracks.length,3);
 await result.playTrack(result.albums[0],1);render();assert.equal(result.queue.tracks.length,3);assert.equal(result.queue.index,1);assert.equal(result.canPrevious,true);assert.equal(result.canNext,true);

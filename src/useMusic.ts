@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { readPlayback,savePlayback,restorePlayback } from './playbackSession';
@@ -106,7 +107,7 @@ export function useMusic() {
  },[publish,replaceQueue,start,control]);
  const connect=useCallback(async()=>{
   if(sourceRef.current!=='music')return;
-  if(!isTauri()){setError('请在 Bee macOS App 中连接“音乐”。');return;}
+  if(!isTauri()){setError(t("请在 Bee macOS App 中连接“音乐”。"));return;}
   setBusy(true);setError('');try{await request('connect');const data=await request<Library>('library');setLibrary(data);setMusicConnected(true);connectedRef.current=true;localStorage.setItem('bee-music-reconnect','true');restore(data.tracks);resetArtworkSession();}catch(e){setError(String(e));}finally{setBusy(false);}
  },[restore]);
  const disconnect=useCallback(async()=>{

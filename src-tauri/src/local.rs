@@ -185,7 +185,7 @@ pub async fn local_request(
     // Native picker returns only a user-selected directory; no arbitrary path IPC.
     let chosen = if operation == "add" {
         rfd::AsyncFileDialog::new()
-            .set_title("选择音乐文件夹")
+            .set_title(crate::music_folder_picker_title())
             .pick_folder()
             .await
             .map(|p| p.path().to_path_buf())

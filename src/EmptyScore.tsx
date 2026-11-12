@@ -1,5 +1,7 @@
+import { t, useLanguage } from './i18n';
 /** Quiet empty-state motif: a flat and a natural cancel on the same staff pitch. */
-export function EmptyScore({label = '暂无音乐', compact = false}: {label?:string;compact?:boolean}) {
+export function EmptyScore({label = t("暂无音乐"), compact = false}: {label?:string;compact?:boolean}) {
+  useLanguage();
   return <div className={`empty-score${compact ? ' compact' : ''}`} role="img" aria-label={label}>
     <svg viewBox="0 0 360 116" aria-hidden="true">
       <g className="score-staff" fill="none" stroke="currentColor" strokeWidth="1">

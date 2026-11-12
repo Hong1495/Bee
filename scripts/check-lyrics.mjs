@@ -1,3 +1,4 @@
+import {i18n} from './i18n-test-loader.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -10,7 +11,7 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/parseLyrics.ts','utf8
 const exports={};let tick;
 
 const jsx=(type,props)=>({type,props});
-vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/Lyrics.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,performance,setInterval:fn=>{tick=fn;return 1;},clearInterval:()=>{},document:{hidden:false,addEventListener:()=>{},removeEventListener:()=>{}},require:id=>id==='react'?react:id==='react/jsx-runtime'?{jsx,jsxs:jsx}:id.includes('/core')?{isTauri:()=>true,invoke:(_,args)=>{calls.push(args);const p=fail?Promise.reject(new Error('offline')):Promise.resolve(response);pending.push(p.catch(()=>{}));return p;}}:parser});
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/Lyrics.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,performance,setInterval:fn=>{tick=fn;return 1;},clearInterval:()=>{},document:{hidden:false,addEventListener:()=>{},removeEventListener:()=>{}},require:id=>id==='./i18n'?i18n:id==='react'?react:id==='react/jsx-runtime'?{jsx,jsxs:jsx}:id.includes('/core')?{isTauri:()=>true,invoke:(_,args)=>{calls.push(args);const p=fail?Promise.reject(new Error('offline')):Promise.resolve(response);pending.push(p.catch(()=>{}));return p;}}:parser});
 let props={track:{id:'a',title:'Totoro',artist:'Artist',album:'Album',duration:120},position:{current:{seconds:2,playing:false,duration:120,sampledAt:performance.now()}},revision:0,refreshToken:0};
 const render=()=>{cursor=0;const tree=exports.Lyrics(props);effects.splice(0).forEach(f=>f());return tree;};
 const settle=async()=>{render();await Promise.all(pending.splice(0));return render();};

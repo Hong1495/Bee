@@ -135,6 +135,43 @@ fn set_content_backing(
     Ok(())
 }
 
+static INTERFACE_LANGUAGE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+fn music_folder_picker_title() -> &'static str {
+    match INTERFACE_LANGUAGE.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => "選擇音樂資料夾",
+        2 => "Choose Music Folder",
+        3 => "音楽フォルダを選択",
+        _ => "选择音乐文件夹",
+    }
+}
+
+#[tauri::command]
+fn set_interface_language(app: tauri::AppHandle, language: String) -> Result<(), String> {
+    let (settings, updates) = match language.as_str() {
+        "zh-Hans" => ("设置…", "检查更新…"),
+        "zh-Hant" => ("設定…", "檢查更新…"),
+        "en" => ("Settings…", "Check for Updates…"),
+        "ja" => ("設定…", "アップデートを確認…"),
+        _ => return Err("Unsupported interface language".into()),
+    };
+    let locale = match language.as_str() { "zh-Hant" => 1, "en" => 2, "ja" => 3, _ => 0 };
+    INTERFACE_LANGUAGE.store(locale, std::sync::atomic::Ordering::Relaxed);
+    if let Some(menu) = app.menu() {
+        for (id, text) in [("bee-settings", settings), ("bee-check-updates", updates)] {
+            // Menu::get searches only direct children; Bee actions live in the app submenu.
+            for entry in menu.items().map_err(|error| error.to_string())? {
+                if let tauri::menu::MenuItemKind::Submenu(submenu) = entry {
+                    if let Some(tauri::menu::MenuItemKind::MenuItem(item)) = submenu.get(id) {
+                        item.set_text(text).map_err(|error| error.to_string())?;
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(restart::RestartTarget::capture())
@@ -200,6 +237,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             set_content_backing,
+            set_interface_language,
             titlebar_double_click,
             update_indicator_position,
             restart::restart_after_update,

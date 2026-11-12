@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { Menu,MenuItem,IconMenuItem,Submenu } from '@tauri-apps/api/menu';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
 import { isTauri } from '@tauri-apps/api/core';
@@ -18,5 +19,5 @@ export async function actionMenu(x:number,y:number,actions:MenuAction[]){
  current=await Menu.new({items});await Promise.all(items.map(item=>item.close()));await current.popup(new LogicalPosition(x,y));
 }
 export function trackMenu(x:number,y:number,play:()=>void,only:()=>void,extra:MenuAction[]=[]){
- return actionMenu(x,y,[{text:'从此处播放',icon:'play',action:play},{text:'仅播放这首',icon:'play-one',action:only},...extra]);
+ return actionMenu(x,y,[{text:t("从此处播放"),icon:'play',action:play},{text:t("仅播放这首"),icon:'play-one',action:only},...extra]);
 }

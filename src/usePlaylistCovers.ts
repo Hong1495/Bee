@@ -1,7 +1,9 @@
+import { t, useLanguage } from './i18n';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import type {Album,MusicPlaylist} from './data';
 import {playlistCover} from './playlistCovers';
 export function usePlaylistCovers(source:string,lists:MusicPlaylist[],albums:Album[],load:(id:string)=>Promise<string[]>,enabled:boolean){
+ const language=useLanguage();
  const [members,setMembers]=useState<{source:string;albums:Album[];ids:Record<string,string[]>}>({source,albums,ids:{}});
  const loader=useRef(load);loader.current=load;
  const [error,setError]=useState('');
@@ -16,12 +18,12 @@ export function usePlaylistCovers(source:string,lists:MusicPlaylist[],albums:Alb
   const worker=async()=>{while(!cancelled&&index<pending.length){const id=pending[index++];try{
    const ids=await loader.current(id);
    if(!cancelled)setMembers(old=>({source,albums,ids:{...(old.source===source&&old.albums===albums?old.ids:{}),[id]:ids}}));
-  }catch(e){if(!cancelled)setError(`播放列表封面读取失败：${String(e)}`);}}};
+  }catch(e){if(!cancelled)setError(t("播放列表封面读取失败：{0}", String(e)));}}};
   void Promise.all([worker(),worker()]);
   return()=>{cancelled=true;};
  // Membership updates must not cancel/restart the in-flight workers.
  },[source,external,albums,enabled]);
  const byTrack=useMemo(()=>new Map(albums.flatMap(album=>album.tracks.map(track=>[track.id,album] as const))),[albums]);
- const covers=useMemo(()=>lists.map(list=>playlistCover(list,list.trackIds??(members.source===source&&members.albums===albums?members.ids[list.id]:undefined),byTrack)),[lists,members,source,byTrack]);
+ const covers=useMemo(()=>lists.map(list=>playlistCover(list,list.trackIds??(members.source===source&&members.albums===albums?members.ids[list.id]:undefined),byTrack)),[lists,members,source,byTrack,language]);
  return {covers,error};
 }
