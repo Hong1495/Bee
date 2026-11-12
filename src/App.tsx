@@ -311,6 +311,7 @@ export default function App() {
   };
   const playlistName = activeList?.name ?? '播放列表';
   const pageTitle = page === 'artists' ? searchResults.activeArtist || (search ? '搜索结果' : '艺术家') : page === 'library' ? '专辑' : page === 'playlists' ? playlistName : page === 'settings' ? '设置' : track?.title || '正在播放';
+  const playbackArtist = page === 'playing' && !selected ? track?.artist?.trim() : '';
   const isCollection = ['library', 'artists', 'playlists'].includes(page);
   const navItems: { page: Page; label: string; icon: React.ReactNode }[] = [
     { page: 'playing', label: '正在播放', icon: <Headphones size={19}/> },
@@ -338,7 +339,10 @@ export default function App() {
     {sidebarOpen && <SidebarDivider width={sidebarWidth} onChange={setSidebarWidth} onPreview={width => { if (isTauri()) queueContentBacking(theme === 'dark', width); }}/>}
     <main className="main">
       <header className="topbar" onMouseDown={dragWindow}>
-        <div className="toolbar-leading"><span>{selected ? selected.title : pageTitle}</span></div>
+        <div className="toolbar-leading">{playbackArtist ? <div className="playback-heading">
+          <span className="playback-heading-title" title={pageTitle}>{pageTitle}</span>
+          <span className="playback-heading-artist" title={playbackArtist}>{playbackArtist}</span>
+        </div> : <span>{selected ? selected.title : pageTitle}</span>}</div>
         <div className="top-actions">{music.connected&&music.listsReady&&page==='playlists'&&!selected&&<>
           <IconButton label="新建播放列表" onClick={()=>setPlaylistDialog({kind:'create'})}><Plus size={18}/></IconButton>
           {activeList?.managed&&<IconButton label="添加歌曲" onClick={()=>setAddingSongs(true)}><ListPlus size={18}/></IconButton>}

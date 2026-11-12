@@ -674,3 +674,9 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,.native-redesign::-webkit-scroll
 [data-theme=dark] .crate-spine,
 [data-theme=dark] .playlist-crate .crate-spine { box-shadow:inset .5px 0 #ffffff24,inset -.5px 0 #0003,2px 1px 3px #0002; }
 [data-theme=dark] .playlist-card .album-art::before { background:#45464b; border-color:#ffffff08; }
+
+/* Keep both playback lines inside the existing 52px window toolbar. */
+.native-redesign .playback-heading { display:flex; flex-direction:column; justify-content:center; gap:1px; min-width:0; max-width:100%; }
+.native-redesign .playback-heading>span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.native-redesign .playback-heading-title { font-size:13px; line-height:16px; font-weight:600; color:var(--text); }
+.native-redesign .playback-heading-artist { font-size:11px; line-height:14px; font-weight:400; color:var(--muted); }
