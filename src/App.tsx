@@ -31,6 +31,7 @@ import type { PlaylistEdit } from './useMusic';
 import { queueContentBacking } from './windowBacking';
 import { ToolbarSearch } from './ToolbarSearch';
 import { SortMenu } from './SortMenu';
+import { useSidebarPeek } from './useSidebarPeek';
 
 import {createNavigationHistory} from './navigationHistory';
 import {suppressBrowserMenu} from './contextMenu';
@@ -71,6 +72,7 @@ export default function App() {
   const [addingSongs,setAddingSongs]=useState(false);
   const draggedSong=useRef<string|null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const sidebarPeek = useSidebarPeek(sidebarOpen);
   const [sidebarWidth, setSidebarWidth] = useState(() => clampSidebar(read<number>('bee-sidebar-width', 220)));
   const [view, setView] = useState<'grid' | 'spines'>(() => read('bee-view', 'grid'));
   const [sort, setSort] = useState('added');
@@ -320,12 +322,12 @@ export default function App() {
     { page: 'playlists', label: '播放列表', icon: <ListMusic size={19}/> },
   ];
 
-  return <div onContextMenu={suppressBrowserMenu} style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties} className={`app native-redesign ${visible ? '' : 'app-hidden'} ${sidebarOpen ? '' : 'sidebar-collapsed'} ${page === 'artists' ? 'three-column' : ''}`}>
+  return <div onContextMenu={suppressBrowserMenu} style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties} className={`app native-redesign ${visible ? '' : 'app-hidden'} ${sidebarOpen ? '' : 'sidebar-collapsed'} ${sidebarPeek.open ? 'sidebar-peeking' : ''} ${page === 'artists' ? 'three-column' : ''}`}>
     {playlistDialog&&<PlaylistDialog state={playlistDialog} lists={customLists} onSave={saveListDialog} onClose={()=>setPlaylistDialog(null)}/>}
     {addingSongs&&activeList?.managed&&<PlaylistSongs albums={albums} existing={playlistIds} onClose={()=>setAddingSongs(false)} onSave={ids=>music.editPlaylist({operation:'add',id:playlist,trackIds:ids})}/>}
     <UpdateIndicator updater={updater} open={updateOpen} setOpen={setUpdateOpen}/>
-    <div className="window-navigation"><div className="history-navigation" role="group" aria-label="浏览导航"><button className="icon-button" aria-label="后退" title="后退（⌘[）" disabled={!history.current.canBack} onClick={()=>travelHistory(-1)}><ArrowLeft size={17} strokeWidth={1.5}/></button><button className="icon-button" aria-label="前进" title="前进（⌘]）" disabled={!history.current.canForward} onClick={()=>travelHistory(1)}><ArrowRight size={17} strokeWidth={1.5}/></button></div><IconButton label={sidebarOpen ? "隐藏侧栏" : "显示侧栏"} className="sidebar-toggle" onClick={() => setSidebarOpen(value=>!value)}><PanelLeft size={18}/></IconButton></div>
-    <aside className="sidebar">
+    <div className="window-navigation"><div className="history-navigation" role="group" aria-label="浏览导航"><button className="icon-button" aria-label="后退" title="后退（⌘[）" disabled={!history.current.canBack} onClick={()=>travelHistory(-1)}><ArrowLeft size={17} strokeWidth={1.5}/></button><button className="icon-button" aria-label="前进" title="前进（⌘]）" disabled={!history.current.canForward} onClick={()=>travelHistory(1)}><ArrowRight size={17} strokeWidth={1.5}/></button></div><button type="button" ref={sidebarPeek.trigger} className="icon-button sidebar-toggle" aria-label={sidebarOpen ? '隐藏侧栏' : '显示侧栏'} title={sidebarOpen ? '隐藏侧栏' : '显示侧栏'} aria-controls="library-sidebar" aria-expanded={sidebarOpen || sidebarPeek.open} onPointerEnter={event=>{if(event.pointerType==='mouse')sidebarPeek.enter();}} onPointerLeave={sidebarPeek.leave} onClick={() => {sidebarPeek.dismiss();setSidebarOpen(value=>!value);}}><PanelLeft size={18}/></button></div>
+    <aside id="library-sidebar" className="sidebar" ref={sidebarPeek.panel} onPointerEnter={sidebarPeek.keep} onPointerLeave={sidebarPeek.leave}>
       <div className={`window-chrome ${isTauri() ? 'native' : ''}`} onMouseDown={dragWindow}>
         {!isTauri() && <span className="preview-traffic-lights"><i/><i/><i/></span>}
       </div>

@@ -680,3 +680,16 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,.native-redesign::-webkit-scroll
 .native-redesign .playback-heading>span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .native-redesign .playback-heading-title { font-size:13px; line-height:16px; font-weight:600; color:var(--text); }
 .native-redesign .playback-heading-artist { font-size:11px; line-height:14px; font-weight:400; color:var(--muted); }
+
+/* A collapsed sidebar previews above content without changing grid/backing width. */
+.native-redesign.sidebar-peeking>.main { grid-column:2; }
+.native-redesign.sidebar-collapsed.sidebar-peeking>.sidebar {
+  position:absolute; z-index:11; left:8px; top:var(--chrome-height); bottom:8px;
+  width:var(--sidebar-width); padding:14px 12px 13px; visibility:visible;
+  overflow-y:auto; background:var(--surface); border:1px solid var(--line);
+  border-radius:10px; box-shadow:0 12px 32px #00000024,0 2px 6px #00000012;
+  animation:sidebar-peek-in 140ms ease-out;
+}
+.native-redesign.sidebar-peeking>.sidebar>.window-chrome { display:none; }
+@keyframes sidebar-peek-in { from { opacity:0; transform:translateX(-6px); } to { opacity:1; transform:translateX(0); } }
+@media(prefers-reduced-motion:reduce) { .native-redesign.sidebar-peeking>.sidebar { animation:none; } }
