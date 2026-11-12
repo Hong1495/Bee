@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 const store=new Map();
-const load=(file,require=()=>{})=>{const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,require,performance,localStorage:{getItem:key=>store.get(key)??null,setItem:(key,value)=>store.set(key,value),removeItem:key=>store.delete(key)},window:{addEventListener(){},removeEventListener(){}},document:{addEventListener(){},removeEventListener(){}},console,setTimeout,clearTimeout});return exports;};
+const document=new EventTarget();document.hidden=false;
+const load=(file,require=()=>{})=>{const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,require,performance,localStorage:{getItem:key=>store.get(key)??null,setItem:(key,value)=>store.set(key,value),removeItem:key=>store.delete(key)},window:{addEventListener(){},removeEventListener(){}},document,console,setTimeout,clearTimeout});return exports;};
 const {parseLrc,lyricIndex}=load('src/parseLyrics.ts');
 const lines=parseLrc('[offset:-500]\n[00:01.00][00:03.5]Repeat\n[00:02.25]Middle\n[ar:Artist]\n[01:70.00]Invalid');
 assert.deepEqual(JSON.parse(JSON.stringify(lines)),[{time:.5,text:'Repeat'},{time:1.75,text:'Middle'},{time:3,text:'Repeat'}]);
@@ -112,3 +113,41 @@ const localQueue=result.queue;
 await result.editPlaylist({operation:'delete',id:'bee:local'});render();assert.equal(result.queue,localQueue);
 await result.selectLibrary('music');render();assert.ok(result.playlists.some(p=>p.id==='bee:music'));
 console.log('PASS: custom list source isolation, local and Apple Music playback order, unavailable track skip, edits/deletion preserve live queue');
+
+// Exercise the recurring poll, not just the initial refresh, while the document
+// is hidden. This verifies our logic; WebKit suspension requires a native run.
+for(const source of ['local','music']){
+ store.clear();slots=[];store.set('bee-library-source',source);render();
+ if(source==='local')await result.updateFolders();else await result.connect();
+ render();await result.playAlbum(result.albums[0]);render();
+ const first=result.track;
+ localStatus={playing:true,ended:false,position:25};
+ musicStatus={running:true,playing:true,track:first,position:25};
+ const saveCleanup=effects[0]();const pollCleanup=effects.at(-1)();
+ try{
+  await new Promise(r=>setTimeout(r,10));
+  const beforeHide=calls.length;
+  document.hidden=true;document.dispatchEvent(new Event('visibilitychange'));render();
+  assert.equal(result.playing,true);
+  assert.equal(session.readPlayback().index,0);
+  assert.ok(!calls.slice(beforeHide).some(c=>['pause','toggle'].includes(c.operation)));
+  result.position.current.seconds=100;result.position.current.sampledAt=performance.now();
+  localStatus={playing:false,ended:true,position:100};
+  musicStatus={running:true,playing:false,track:null,position:0};
+  await new Promise(r=>setTimeout(r,850));render();
+  assert.equal(result.queue.index,1,`${source}: hidden queue advances`);
+  assert.equal(result.playing,true);
+  // A deliberate pause must not be undone by the background scheduler.
+  await result.toggle();render();
+  localStatus={playing:false,ended:false,position:12};
+  musicStatus={running:true,playing:false,track:result.track,position:12};
+  const beforePausedPoll=calls.length;
+  await new Promise(r=>setTimeout(r,850));render();
+  assert.equal(result.playing,false);
+  assert.equal(result.queue.index,1);
+  assert.ok(!calls.slice(beforePausedPoll).some(c=>c.operation==='play'));
+ }finally{
+  pollCleanup();saveCleanup();document.hidden=false;
+ }
+}
+console.log('PASS: hidden local/Music playback persists without pausing, recurring polls advance both queues, explicit pause stays paused');

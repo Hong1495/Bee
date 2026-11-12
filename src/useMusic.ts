@@ -131,6 +131,8 @@ export function useMusic() {
    if(next==='local')await folders();else await connect();
   });
  },[control,replaceQueue,publish,folders,connect]);
+ // Queue advancement must keep running while hidden. The main WebView disables
+ // background suspension on macOS 14+; only visual updates use document.hidden.
  useEffect(()=>{let stopped=false;let timer:ReturnType<typeof setTimeout>;const poll=async()=>{await refreshStatus();if(!stopped)timer=setTimeout(poll,800);};void poll();return()=>{stopped=true;clearTimeout(timer);};},[refreshStatus]);
  const loadPlaylist=useCallback(async(id:string)=>{const list=playlists.find(p=>p.id===id);return list?.managed||list?.source==='local'?list.trackIds??[]:request<string[]>('playlist',id);},[playlists]);
  const playTrack=useCallback((record:Album,index:number,only=false)=>control(async()=>{const songs=record.tracks.flatMap(t=>lookup.get(t.id)?[lookup.get(t.id)!]:[]);await start({name:only?record.tracks[index].title:record.title,tracks:only?[songs[index]]:songs,index:only?0:index});}),[control,lookup,start]);
