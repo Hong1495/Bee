@@ -39,6 +39,12 @@ sh scripts/build-macos-icon.sh
 
 ## 验证
 
+原生侧栏使用 AppKit 的 `Sidebar` 材质，WebView 只叠加明暗底色，不再额外进行
+`backdrop-filter` 模糊。避免将整窗 Liquid Glass 与网页模糊叠加，产生不同的
+最小化合成路径。材质随系统窗口激活状态变化；不拦截或替换系统 Dock 动画。
+调整窗口材质后，应在明暗模式下分别检查最小化／恢复、失焦、侧栏收起和拖动宽度，
+以及系统“减少透明度”设置。静态截图和构建通过不能证明动画过渡正常。
+
 ```sh
 npm run check
 cargo test --manifest-path src-tauri/Cargo.toml
