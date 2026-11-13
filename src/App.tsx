@@ -229,8 +229,8 @@ export default function App() {
   }, [themeMode]);
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   useEffect(() => {
-    if (isTauri()) queueContentBacking(theme === 'dark', sidebarOpen ? sidebarWidth : 0);
-  }, [theme, sidebarOpen, sidebarWidth]);
+    if (isTauri()) queueContentBacking(theme === 'dark', sidebarOpen ? sidebarWidth : 0, page === 'radio' && !selected);
+  }, [theme, sidebarOpen, sidebarWidth, page, selected]);
   useEffect(() => { localStorage.setItem('bee-view', JSON.stringify(view)); }, [view]);
   useEffect(() => { document.documentElement.dataset.native = String(isTauri()); }, []);
   useEffect(() => { localStorage.removeItem('bee-icon'); }, []);
@@ -356,7 +356,7 @@ export default function App() {
       <div className="sidebar-bottom"><button aria-label={t("设置")} className={`nav-item ${page === 'settings' ? 'selected' : ''}`} onClick={() => navigate('settings')}><Settings2 size={18}/><span>{t("设置")}</span></button></div>
     </aside>
 
-    {sidebarOpen && <SidebarDivider width={sidebarWidth} onChange={setSidebarWidth} onPreview={width => { if (isTauri()) queueContentBacking(theme === 'dark', width); }}/>}
+    {sidebarOpen && <SidebarDivider width={sidebarWidth} onChange={setSidebarWidth} onPreview={width => { if (isTauri()) queueContentBacking(theme === 'dark', width, radioPage); }}/>}
     <main className="main">
       <header className="topbar" onMouseDown={dragWindow}>
         <div className="toolbar-leading">{radioPage ? <div className="playback-heading radio-heading"><span className="playback-heading-title" title={pageTitle}>{pageTitle}</span>{radioMetadata&&<span className="playback-heading-artist" title={[radioMetadata.credit,t(radioStation.label)].filter(Boolean).join(' · ')}>{radioMetadata.credit&&<span>{radioMetadata.credit}</span>}<span className="radio-heading-station" title="YourClassical · American Public Media">{t(radioStation.label)}</span></span>}</div> : playbackArtist ? <div className="playback-heading">

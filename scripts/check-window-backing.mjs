@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import ts from 'typescript';
+const calls=[],pending=[],exports={};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/windowBacking.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,{exports,console,require:()=>({invoke:(command,args)=>new Promise(resolve=>{calls.push({command,...args});pending.push(resolve);})})});
+const flush=()=>new Promise(resolve=>setImmediate(resolve));
+exports.queueContentBacking(false,220,true);
+exports.queueContentBacking(true,240,true);
+exports.queueContentBacking(true,0,true);
+assert.equal(calls.length,1);assert.equal(calls[0].classical,true);
+pending.shift()();await flush();assert.equal(calls.length,2);assert.equal(calls[1].dark,true);assert.equal(calls[1].sidebarWidth,0);
+exports.queueContentBacking(true,220,false);
+pending.shift()();await flush();assert.equal(calls.length,3);assert.equal(calls[2].classical,false);assert.equal(calls[2].sidebarWidth,220);
+pending.shift()();await flush();
+exports.queueContentBacking(false,220);assert.equal(calls[3].classical,false);pending.shift()();await flush();
+console.log('PASS: native backing carries page palette, coalesces resize updates and restores library palette');

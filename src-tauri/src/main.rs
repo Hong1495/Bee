@@ -53,11 +53,21 @@ fn titlebar_double_click(window: tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
+// Match the content palette even during frames WebKit has not painted yet.
+fn content_backing_color(dark: bool, classical: bool) -> (f64, f64, f64) {
+    match (dark, classical) {
+        (false, true) => (198.0, 173.0, 125.0), // #c6ad7d
+        (true, true) => (107.0, 91.0, 63.0), // #6b5b3f
+        (false, false) => (247.0, 247.0, 249.0),
+        (true, false) => (41.0, 42.0, 46.0),
+    }
+}
+
 // This backing surface is resized by AppKit in the same transaction as the
 // window. A transparent WKWebView can otherwise expose glass at the trailing
 // edge while WebKit catches up with live resize.
 #[cfg(target_os = "macos")]
-fn update_content_backing(native: &objc2_app_kit::NSWindow, dark: bool, sidebar_width: f64) {
+fn update_content_backing(native: &objc2_app_kit::NSWindow, dark: bool, sidebar_width: f64, classical: bool) {
     use objc2::{MainThreadMarker, MainThreadOnly, Message};
     use objc2_app_kit::{
         NSAutoresizingMaskOptions, NSBox, NSBoxType, NSColor, NSView, NSWindowOrderingMode,
@@ -99,11 +109,7 @@ fn update_content_backing(native: &objc2_app_kit::NSWindow, dark: bool, sidebar_
     frame.origin.x += sidebar_width;
     frame.size.width = (frame.size.width - sidebar_width).max(0.0);
     backing.setFrame(frame);
-    let (r, g, b) = if dark {
-        (41.0, 42.0, 46.0)
-    } else {
-        (247.0, 247.0, 249.0)
-    };
+    let (r, g, b) = content_backing_color(dark, classical);
     backing.setFillColor(&NSColor::colorWithSRGBRed_green_blue_alpha(
         r / 255.0,
         g / 255.0,
@@ -117,6 +123,7 @@ fn set_content_backing(
     window: tauri::WebviewWindow,
     dark: bool,
     sidebar_width: f64,
+    classical: bool,
 ) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -128,6 +135,7 @@ fn set_content_backing(
                         unsafe { &*(ptr as *const objc2_app_kit::NSWindow) },
                         dark,
                         sidebar_width,
+                        classical,
                     );
                 }
             })
@@ -216,7 +224,7 @@ fn main() {
                     // the animation appropriate to the current system settings.
                     native.setFrameAutosaveName(&NSString::from_str("BeeMainWindow"));
                     native.setAnimationBehavior(objc2_app_kit::NSWindowAnimationBehavior::Default);
-                    update_content_backing(native, false, 220.0);
+                    update_content_backing(native, false, 220.0, false);
                 }
             }
             Ok(())

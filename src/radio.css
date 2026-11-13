@@ -4,9 +4,10 @@
 .native-redesign.classical-mode .topbar{background:var(--concert-ground);border-bottom:0;box-shadow:none}
 .native-redesign.classical-mode .topbar .icon-button{color:var(--concert-ink);border:1px solid var(--concert-edge);border-radius:7px;background:linear-gradient(145deg,#fff3d522,#90682e0d)}
 .native-redesign.classical-mode .topbar .icon-button:hover{background:var(--concert-hover)}
-.radio-page{min-height:100%;display:flex;flex-direction:column;position:relative;padding:0;overflow:hidden}
-.radio-listening-stack{width:100%;min-height:calc(100dvh - 60px);display:flex;flex-direction:column;justify-content:center}
-.golden-hall-scene{position:relative;width:100%;aspect-ratio:1200/670;flex:0 0 auto;isolation:isolate;overflow:hidden;mask-image:linear-gradient(to bottom,transparent,#000 12%,#000 86%,transparent);-webkit-mask-image:linear-gradient(to bottom,transparent,#000 12%,#000 86%,transparent)}
+.native-redesign.classical-mode .main-scroll{display:flex;flex-direction:column;min-height:0}
+.radio-page{--radio-footer-height:68px;flex:1;min-height:0;display:flex;flex-direction:column;position:relative;padding:0;overflow:hidden}
+.radio-listening-stack{width:100%;flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.golden-hall-scene{position:relative;width:min(100%,calc((100dvh - var(--chrome-height) - var(--radio-footer-height))*1200/670));aspect-ratio:1200/670;flex:0 0 auto;isolation:isolate;overflow:hidden;mask-image:linear-gradient(to bottom,transparent,#000 12%,#000 86%,transparent);-webkit-mask-image:linear-gradient(to bottom,transparent,#000 12%,#000 86%,transparent)}
 .golden-hall-art{display:block;width:100%;height:100%;position:absolute;inset:0;}
 .golden-hall-scene:after{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,var(--bg) 0%,color-mix(in srgb,var(--bg) 72%,transparent) 2%,color-mix(in srgb,var(--bg) 25%,transparent) 6%,transparent 13%,transparent 87%,color-mix(in srgb,var(--bg) 25%,transparent) 94%,color-mix(in srgb,var(--bg) 72%,transparent) 98%,var(--bg) 100%)}
 .hall-interior{filter:saturate(.96) brightness(.99)}
@@ -14,7 +15,7 @@
 /* Map the SVG's ochre ground to the page bronze without washing out shadows. */
 [data-theme=dark] .hall-interior{filter:url(#hallNightTone);opacity:1}
 [data-theme=dark] .golden-hall-scene{mask-image:linear-gradient(to bottom,transparent,#000 22%,#000 76%,transparent);-webkit-mask-image:linear-gradient(to bottom,transparent,#000 22%,#000 76%,transparent)}
-.radio-listening-footer{display:flex;flex-direction:column;align-items:center;position:relative;padding:8px 20px 32px;flex:0 0 auto}
+.radio-listening-footer{display:flex;flex-direction:column;align-items:center;position:relative;padding:8px 20px 24px;flex:0 0 auto}
 .radio-listening-footer>.floating-transport{position:relative;bottom:auto;left:auto;transform:none;flex-shrink:0}.radio-transport input{width:72px;height:3px;accent-color:var(--muted);margin-right:7px}.radio-spinner{animation:radio-spin 1.2s linear infinite}
 .radio-sidebar-channels{display:flex;flex-direction:column;gap:2px;margin:3px 0 8px;padding-left:18px;min-width:0}
 .sidebar .radio-channel{display:flex;align-items:center;gap:9px;width:100%;min-width:0;height:32px;padding:0 10px;border-radius:6px;text-align:left;font-size:12px;font-weight:400;color:var(--muted);background:transparent}
@@ -38,7 +39,6 @@
 @keyframes hall-conduct-right{0%,100%{transform:rotate(-8deg)}28%{transform:rotate(15deg)}47%{transform:rotate(9deg)}76%{transform:rotate(-14deg)}}
 @keyframes hall-wrist{0%,100%{transform:rotate(-3deg)}32%{transform:rotate(9deg)}53%{transform:rotate(-6deg)}80%{transform:rotate(4deg)}}
 @keyframes radio-spin{to{transform:rotate(360deg)}}
-@media(max-height:740px){.radio-listening-footer{padding-bottom:20px}.golden-hall-scene{max-height:calc(100dvh - 210px)}}
 @media(prefers-reduced-motion:reduce){.radio-page *{animation:none!important;transition:none!important}}
 
 /* Gold palette only; shared transport geometry and icons remain unchanged. */
@@ -99,3 +99,9 @@
 .radio-heading .playback-heading-artist>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .radio-heading-station{flex-shrink:0;opacity:.7;font-size:10px}
 .radio-heading-station:not(:first-child)::before{content:"·";margin-right:8px}
+
+/* Native layout owns resizing: no React renders or integer size measurements. */
+@supports (width:1cqh){
+  .radio-listening-stack{container-type:size}
+  .golden-hall-scene{width:min(100cqw,calc((100cqh - var(--radio-footer-height))*1200/670))}
+}
