@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import ts from 'typescript';
+const store=new Map(),exports={};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/workspaceSession.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,{exports,localStorage:{getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v)}});
+const {readWorkspace,saveWorkspace}=exports;
+assert.equal(readWorkspace().location.page,'library');
+const saved={version:1,source:'music',sidebarOpen:false,radioExpanded:true,location:{page:'artists',albumId:'record:1',playlist:'',artist:'Bach',query:'concerto',view:'spines',sort:'year',scroll:480,spine:200}};
+saveWorkspace(saved);assert.deepEqual(JSON.parse(JSON.stringify(readWorkspace())),saved);
+store.set('bee-library-source','local');const switched=readWorkspace();assert.equal(switched.sidebarOpen,false);assert.equal(switched.location.page,'artists');assert.equal(switched.location.albumId,'');assert.equal(switched.location.query,'');assert.equal(switched.location.scroll,0);
+store.set('bee-workspace-session',JSON.stringify({...saved,location:{page:'invalid',albumId:123,view:'broken',scroll:-20,spine:null}}));const invalid=readWorkspace();assert.equal(invalid.location.page,'library');assert.equal(invalid.location.view,'grid');assert.equal(invalid.location.albumId,'');assert.equal(invalid.location.scroll,0);
+store.set('bee-workspace-session','broken');assert.equal(readWorkspace().location.page,'library');
+store.set('bee-workspace-session',JSON.stringify({...saved,version:99}));assert.equal(readWorkspace().location.page,'library');
+console.log('PASS: workspace roundtrip, closed sidebar, detail/search/scroll restore, source isolation, malformed and future data fallback');

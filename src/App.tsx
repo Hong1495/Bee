@@ -42,8 +42,7 @@ import { useSidebarPeek } from './useSidebarPeek';
 import {createNavigationHistory} from './navigationHistory';
 import {suppressBrowserMenu} from './contextMenu';
 
-type Page = 'library' | 'artists' | 'playlists' | 'playing' | 'radio' | 'settings';
-type Location = {page:Page;albumId:string;playlist:string;artist:string;query:string;view:'grid'|'spines';sort:string;scroll:number;spine?:number};
+import {readWorkspace,saveWorkspace,type Page,type Location} from './workspaceSession';
 const read = <T,>(key: string, fallback: T): T => { try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; } };
 const IconButton = ({ label, children, onClick, active = false, className = '' }: { label: string; children: React.ReactNode; onClick?: () => void; active?: boolean; className?: string }) => <button type="button" className={`icon-button ${active ? 'active' : ''} ${className}`} aria-label={label} title={label} onClick={onClick}>{children}</button>;
 
@@ -58,36 +57,39 @@ export default function App() {
     if (isTauri()) void invoke('set_interface_language', { language }).catch(error => console.error('Native menu language:', error));
   }, [language]);
   useEffect(() => { setUISoundsEnabled(uiSounds); localStorage.setItem('bee-ui-sounds', JSON.stringify(uiSounds)); }, [uiSounds]);
-  const [page, setPage] = useState<Page>('library');
-  const [selected, setSelected] = useState<Album | null>(null);
+  const [workspace]=useState(readWorkspace);
+  const [page, setPage] = useState<Page>(workspace.location.page);
+  const [selectedId,setSelectedId]=useState(workspace.location.albumId);
   const music = useMusic();
   const radioMetadata = useRadioMetadata(music.radio);
   const { albums, currentId, playing, track } = music;
-  useEffect(()=>{setSelected(null);setQuery('');setPlaylistDialog(null);setAddingSongs(false);setPlaylist('');},[music.source]);
+  const selected=albums.find(item=>item.id===selectedId)??null;
+  const previousSource=useRef(music.source);
   const album = music.currentAlbum;
   const trackIndex = album?.tracks.findIndex(item => item.id === track?.id) ?? -1;
   const [preferencesRevision,setPreferencesRevision] = useState(0);
   const [lyricsRefresh,setLyricsRefresh] = useState(0);
-  const [loadedPlaylistIds, setPlaylistIds] = useState<string[]>([]);
+  const [loadedPlaylist,setLoadedPlaylist] = useState<{id:string;source:string;ids:string[]}|null>(null);
   const [playlistLoading, setPlaylistLoading] = useState(false);
   const [themeMode, setTheme] = useState<'light' | 'dark' | 'system'>(() => read('bee-theme', 'light'));
   const [systemDark, setSystemDark] = useState(matchMedia('(prefers-color-scheme: dark)').matches);
   const theme = themeMode === 'system' ? (systemDark ? 'dark' : 'light') : themeMode;
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(workspace.location.query);
   const artists = useMemo(() => [...new Set(albums.map(item => item.artist))].sort((a, b) => a.localeCompare(b)), [albums]);
-  const [artist, setArtist] = useState('');
-  const [playlist, setPlaylist] = useState('');
+  const [artist, setArtist] = useState(workspace.location.artist);
+  const [playlist, setPlaylist] = useState(workspace.location.playlist);
   const selectedCustomList=music.playlists.find(item=>item.id===playlist&&item.managed);
-  const playlistIds=selectedCustomList?.trackIds??loadedPlaylistIds;
+  const playlistReady=!!selectedCustomList||(loadedPlaylist?.id===playlist&&loadedPlaylist.source===music.source);
+  const playlistIds=selectedCustomList?.trackIds??(playlistReady?loadedPlaylist?.ids??[]:[]);
   const [playlistDialog,setPlaylistDialog]=useState<PlaylistDialogState|null>(null);
   const [addingSongs,setAddingSongs]=useState(false);
   const draggedSong=useRef<string|null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [radioExpanded, setRadioExpanded] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(workspace.sidebarOpen);
+  const [radioExpanded, setRadioExpanded] = useState(workspace.radioExpanded);
   const sidebarPeek = useSidebarPeek(sidebarOpen);
   const [sidebarWidth, setSidebarWidth] = useState(() => clampSidebar(read<number>('bee-sidebar-width', 220)));
-  const [view, setView] = useState<'grid' | 'spines'>(() => read('bee-view', 'grid'));
-  const [sort, setSort] = useState('added');
+  const [view, setView] = useState<'grid' | 'spines'>(workspace.location.view);
+  const [sort, setSort] = useState(workspace.location.sort);
   const [toast, setToast] = useState('');
   const [queueOpen, setQueueOpen] = useState(false);
   const [visible, setVisible] = useState(!document.hidden);
@@ -99,22 +101,18 @@ export default function App() {
   const viewAnchor = useRef<string | undefined>(undefined);
   const viewAnimation = useRef<Animation | null>(null);
   useEffect(() => () => viewAnimation.current?.cancel(), []);
-  const spineScroll = useRef<number | undefined>(undefined);
+  const spineScroll = useRef<number | undefined>(workspace.location.spine);
   const saveSpineScroll = useCallback((position: number) => { spineScroll.current = position; }, []);
   const location=useRef<Location>(null!);
-  location.current={page,albumId:selected?.id??'',playlist,artist,query,view,sort,scroll:0,spine:spineScroll.current};
+  location.current={page,albumId:selectedId,playlist,artist,query,view,sort,scroll:0,spine:spineScroll.current};
   const history=useRef(createNavigationHistory(location.current,(a,b)=>a.page===b.page&&a.albumId===b.albumId&&a.playlist===b.playlist&&a.artist===b.artist&&a.query===b.query));
   const [,refreshHistory]=useState(0);
-  const pendingLocation=useRef<Location|null>(null);
-  const latestLibrary=useRef({albums,lists:music.playlists,connected:music.connected});
-  latestLibrary.current={albums,lists:music.playlists,connected:music.connected};
-  const capture=useCallback(()=>({...location.current,scroll:scrollRef.current?.scrollTop??0,spine:spineScroll.current}),[]);
+  const pendingLocation=useRef<Location|null>({...workspace.location});
+  const capture=useCallback(()=>({...location.current,scroll:pendingLocation.current?.scroll??scrollRef.current?.scrollTop??0,spine:pendingLocation.current?.spine??scrollRef.current?.querySelector<HTMLElement>('.crate-browser')?.scrollLeft??spineScroll.current}),[]);
   const applyLocation=useCallback((next:Location)=>{
-    const library=latestLibrary.current;
-    const record=library.connected?library.albums.find(a=>a.id===next.albumId):undefined;
-    const target={...next,albumId:record?.id??'',playlist:next.playlist};
+    const target={...next};
     pendingLocation.current=target;spineScroll.current=target.spine;
-    setPage(target.page);setSelected(record??null);setArtist(target.artist);setPlaylist(target.playlist);setQuery(target.query);setView(target.view);setSort(target.sort);
+    setPage(target.page);setSelectedId(target.albumId);setArtist(target.artist);setPlaylist(target.playlist);setQuery(target.query);setView(target.view);setSort(target.sort);
     setPlaylistDialog(null);setAddingSongs(false);setQueueOpen(false);
     refreshHistory(n=>n+1);
   },[]);
@@ -127,13 +125,13 @@ export default function App() {
   },[capture,applyLocation,transitionAlbum]);
   const travelHistory=useCallback((offset:-1|1)=>{
     const current=capture(),entry=history.current.move(current,offset);if(!entry)return;
-    const next={...entry,playlist:latestLibrary.current.lists.some(p=>p.id===entry.playlist)?entry.playlist:''};
+    const next={...entry};
     const id=next.albumId||next.playlist||current.albumId||current.playlist;
     if(id)transitionAlbum(()=>applyLocation(next),id,!!(next.albumId||next.playlist));else applyLocation(next);
   },[capture,applyLocation,transitionAlbum]);
   const openAlbum=useCallback((record:Album)=>visit({albumId:record.id}),[visit]);
-  const closeAlbum=useCallback(()=>{if(location.current.albumId||location.current.playlist)travelHistory(-1);},[travelHistory]);
-  useEffect(()=>{history.current.reset({...capture(),albumId:'',playlist:'',query:'',spine:undefined});spineScroll.current=undefined;refreshHistory(n=>n+1);},[music.source,capture]);
+  const closeAlbum=useCallback(()=>{if(location.current.albumId||location.current.playlist){if(history.current.canBack)travelHistory(-1);else visit({albumId:'',playlist:''});}},[travelHistory,visit]);
+  useEffect(()=>{if(previousSource.current===music.source)return;previousSource.current=music.source;pendingLocation.current=null;setSelectedId('');setQuery('');setArtist('');setPlaylistDialog(null);setAddingSongs(false);setPlaylist('');history.current.reset({...capture(),albumId:'',playlist:'',artist:'',query:'',spine:undefined});spineScroll.current=undefined;location.current={...location.current,albumId:'',playlist:'',artist:'',query:'',scroll:0,spine:undefined};scrollRef.current?.scrollTo({top:0});refreshHistory(n=>n+1);},[music.source,capture]);
   const changeView = (next: 'grid' | 'spines') => {
     if (next === view) return;
     const root = scrollRef.current;
@@ -174,7 +172,7 @@ export default function App() {
   };
   const startAlbum = music.playAlbum;
   const togglePlayback = useRef(music.toggle);
-  togglePlayback.current = () => page === 'radio' && !music.radio.station ? music.playRadio(radioStations[0]) : music.toggle(page === 'playing');
+  togglePlayback.current = () => page === 'radio' && !music.radio.station ? music.playRadio(music.lastRadioStation) : music.toggle(page === 'playing');
   const navigate = useCallback((nextPage:Page)=>visit({page:nextPage,playlist:'',albumId:'',query:'',spine:undefined}),[visit]);
   const menuUpdater = useRef(updater);
   const menuUpdateRequested = useRef(false);
@@ -206,22 +204,21 @@ export default function App() {
       .catch(error => setToast(t("菜单连接失败：{0}", String(error))));
     return () => { disposed = true; unlisten?.(); };
   }, []);
-  useEffect(() => { if (!artists.includes(artist)) setArtist(artists[0] ?? ''); }, [artists, artist]);
-  useEffect(() => { if (playlist&&!music.playlists.some(item => item.id === playlist)) setPlaylist(''); }, [music.playlists, playlist]);
+  useEffect(() => { if (music.libraryReady&&!music.busy&&!music.folderBusy&&artist&&!artists.includes(artist)) setArtist(artists[0] ?? ''); }, [artists, artist,music.libraryReady,music.busy,music.folderBusy]);
+  useEffect(() => { if (music.libraryReady&&music.listsReady&&!music.busy&&!music.folderBusy&&playlist&&!music.playlists.some(item => item.id === playlist)) setPlaylist(''); }, [music.playlists, playlist,music.libraryReady,music.listsReady,music.busy,music.folderBusy]);
   useEffect(() => {
     let cancelled = false;
     if(selectedCustomList){setPlaylistLoading(false);return;}
-    setPlaylistIds([]);
-    if (!playlist || !music.connected) { setPlaylistLoading(false); return; }
+    setLoadedPlaylist(null);
+    if (!playlist || !music.connected || !music.libraryReady || !music.listsReady) { setPlaylistLoading(false); return; }
     setPlaylistLoading(true);
-    music.loadPlaylist(playlist).then(ids => { if (!cancelled) setPlaylistIds(ids); })
+    music.loadPlaylist(playlist).then(ids => { if (!cancelled) setLoadedPlaylist({id:playlist,source:music.source,ids}); })
       .catch(error => { if (!cancelled) music.setError(String(error)); })
       .finally(() => { if (!cancelled) setPlaylistLoading(false); });
     return () => { cancelled = true; };
-  }, [playlist, music.connected, music.loadPlaylist,selectedCustomList]);
+  }, [playlist, music.source, music.connected, music.libraryReady, music.listsReady, music.loadPlaylist,selectedCustomList]);
   useEffect(()=>{setAddingSongs(false);draggedSong.current=null;},[page,playlist]);
-  useEffect(() => { if (!music.connected) setSelected(null); }, [music.connected]);
-  useEffect(() => { setSelected(current => current ? albums.find(item => item.id === current.id) ?? current : null); }, [albums]);
+  useEffect(()=>{if(music.libraryReady&&!music.busy&&!music.folderBusy&&selectedId&&!albums.some(item=>item.id===selectedId))setSelectedId('');},[albums,selectedId,music.libraryReady,music.busy,music.folderBusy]);
   useEffect(() => {
     localStorage.setItem('bee-theme', JSON.stringify(themeMode));
     // Clear the native override so WebKit receives macOS appearance changes.
@@ -258,15 +255,34 @@ export default function App() {
   }, [page, artist, query, sort]);
   useLayoutEffect(() => {
     scrollRef.current?.scrollTo({ top: selected || playlist ? 0 : returnScroll.current, behavior: 'instant' });
-  }, [selected,playlist]);
+  }, [selected?.id,playlist]);
 
   useLayoutEffect(()=>{
-    const next=pendingLocation.current;if(!next)return;pendingLocation.current=null;
+    const next=pendingLocation.current;if(!next)return;
+    if(next.page!==page||next.query!==query||next.artist!==artist||next.sort!==sort||next.albumId!==selectedId||next.playlist!==playlist||next.view!==view){pendingLocation.current=null;return;}
+    if((['library','artists','playlists'].includes(page)||selectedId)&&(!music.libraryReady||music.busy||music.folderBusy))return;
+    if(selectedId&&!selected)return;
+    if(page==='playlists'&&(!music.listsReady||(playlist&&(!playlistReady||playlistLoading))))return;
+    if(query.trim().toLowerCase()!==search)return;
+    pendingLocation.current=null;
     spineScroll.current=next.spine;gridScroll.current=next.scroll;
     scrollRef.current?.scrollTo({top:next.scroll,behavior:'instant'});
     const shelf=scrollRef.current?.querySelector<HTMLElement>('.crate-browser');
     if(shelf&&next.spine!==undefined)shelf.scrollLeft=next.spine;
   });
+
+
+  const workspaceNow=useRef(workspace);
+  workspaceNow.current={version:1,source:music.source,sidebarOpen,radioExpanded,location:location.current};
+  const persistWorkspace=useCallback(()=>saveWorkspace({...workspaceNow.current,location:capture()}),[capture]);
+  useEffect(()=>{persistWorkspace();},[page,selectedId,playlist,artist,query,view,sort,sidebarOpen,radioExpanded,music.source,persistWorkspace]);
+  useEffect(()=>{
+    const root=scrollRef.current;
+    const save=()=>persistWorkspace();
+    root?.addEventListener('scroll',save,{passive:true,capture:true});
+    window.addEventListener('pagehide',save);window.addEventListener('bee-before-update',save);document.addEventListener('visibilitychange',save);
+    return()=>{save();root?.removeEventListener('scroll',save,true);window.removeEventListener('pagehide',save);window.removeEventListener('bee-before-update',save);document.removeEventListener('visibilitychange',save);};
+  },[persistWorkspace]);
 
 
   const search = useDeferredValue(query.trim().toLowerCase());
@@ -325,7 +341,7 @@ export default function App() {
   };
   const playlistName = activeList?.name ?? t("播放列表");
   const radioPage = !selected && page === 'radio';
-  const radioStation = music.radio.station ?? radioStations[0];
+  const radioStation = music.radio.station ?? music.lastRadioStation;
   const pageTitle = radioPage ? radioMetadata?.title || t(radioStation.label) : page === 'artists' ? searchResults.activeArtist || (search ? t("搜索结果") : t("艺术家")) : page === 'library' ? t("专辑") : page === 'playlists' ? playlistName : page === 'settings' ? t("设置") : track?.title || t("正在播放");
   const playbackArtist = page === 'playing' && !selected ? track?.artist?.trim() : '';
   const isCollection = ['library', 'artists', 'playlists'].includes(page);
@@ -341,7 +357,7 @@ export default function App() {
     {playlistDialog&&<PlaylistDialog state={playlistDialog} lists={customLists} onSave={saveListDialog} onClose={()=>setPlaylistDialog(null)}/>}
     {addingSongs&&activeList?.managed&&<PlaylistSongs albums={albums} existing={playlistIds} onClose={()=>setAddingSongs(false)} onSave={ids=>music.editPlaylist({operation:'add',id:playlist,trackIds:ids})}/>}
     <UpdateIndicator updater={updater} open={updateOpen} setOpen={setUpdateOpen}/>
-    <div className="window-navigation"><div className="history-navigation" role="group" aria-label={t("浏览导航")}><button className="icon-button" aria-label={t("后退")} title={t("后退（⌘[）")} disabled={!history.current.canBack} onClick={()=>travelHistory(-1)}><ArrowLeft size={17} strokeWidth={1.5}/></button><button className="icon-button" aria-label={t("前进")} title={t("前进（⌘]）")} disabled={!history.current.canForward} onClick={()=>travelHistory(1)}><ArrowRight size={17} strokeWidth={1.5}/></button></div><button type="button" ref={sidebarPeek.trigger} className="icon-button sidebar-toggle" aria-label={sidebarOpen ? t("隐藏侧栏") : t("显示侧栏")} title={sidebarOpen ? t("隐藏侧栏") : t("显示侧栏")} aria-controls="library-sidebar" aria-expanded={sidebarOpen || sidebarPeek.open} onPointerEnter={event=>{if(event.pointerType==='mouse')sidebarPeek.enter();}} onPointerLeave={sidebarPeek.leave} onClick={() => {sidebarPeek.dismiss();setSidebarOpen(value=>!value);}}><PanelLeft size={18}/></button></div>
+    <div className="window-navigation"><div className="history-navigation" role="group" aria-label={t("浏览导航")}><button className="icon-button" aria-label={t("后退")} title={t("后退（⌘[）")} disabled={!history.current.canBack&&!selectedId&&!playlist} onClick={()=>history.current.canBack?travelHistory(-1):closeAlbum()}><ArrowLeft size={17} strokeWidth={1.5}/></button><button className="icon-button" aria-label={t("前进")} title={t("前进（⌘]）")} disabled={!history.current.canForward} onClick={()=>travelHistory(1)}><ArrowRight size={17} strokeWidth={1.5}/></button></div><button type="button" ref={sidebarPeek.trigger} className="icon-button sidebar-toggle" aria-label={sidebarOpen ? t("隐藏侧栏") : t("显示侧栏")} title={sidebarOpen ? t("隐藏侧栏") : t("显示侧栏")} aria-controls="library-sidebar" aria-expanded={sidebarOpen || sidebarPeek.open} onPointerEnter={event=>{if(event.pointerType==='mouse')sidebarPeek.enter();}} onPointerLeave={sidebarPeek.leave} onClick={() => {sidebarPeek.dismiss();setSidebarOpen(value=>!value);}}><PanelLeft size={18}/></button></div>
     <aside id="library-sidebar" className="sidebar" ref={sidebarPeek.panel} onPointerEnter={sidebarPeek.keep} onPointerLeave={sidebarPeek.leave}>
       <div className={`window-chrome ${isTauri() ? 'native' : ''}`} onMouseDown={dragWindow}>
         {!isTauri() && <span className="preview-traffic-lights"><i/><i/><i/></span>}
@@ -351,7 +367,7 @@ export default function App() {
       <nav aria-label={group}>{navItems.filter(item => (['playing','radio'].includes(item.page)) === (index === 1)).map(item => {
         const navButton = <button key={item.page} aria-label={item.label} aria-current={page === item.page ? 'page' : undefined} className={`nav-item ${page === item.page ? 'selected' : ''}`} onClick={() => {if(item.page==='radio')setRadioExpanded(true);navigate(item.page);}}>{item.icon}<span>{item.label}</span>{(item.page === 'radio' ? music.radio.phase==='playing' : item.page === 'playing' && !music.radio.station && playing) && <span className="equalizer"><i/><i/><i/></span>}</button>;
         return item.page==='radio' ? <div key={item.page} className="radio-navigation-row">{navButton}<button className="radio-disclosure" aria-label={t('选择电台频道')} aria-expanded={radioExpanded} aria-controls="radio-sidebar-channels" onClick={()=>setRadioExpanded(value=>!value)}><ChevronRight size={13}/></button></div> : navButton;
-      })}{index===1&&radioExpanded&&<div id="radio-sidebar-channels" className="radio-sidebar-channels" role="group" aria-label={t('选择电台频道')}>{radioStations.map(station=><button key={station.id} className={`radio-channel ${radioPage&&music.radio.station?.id===station.id?'selected':''}`} aria-pressed={radioPage&&music.radio.station?.id===station.id} disabled={music.transportBusy} onClick={()=>{navigate('radio');if(music.radio.station?.id!==station.id||!['playing','connecting','buffering','retrying'].includes(music.radio.phase))void music.playRadio(station);}}><RadioInstrumentIcon kind={station.id}/><span>{t(station.label)}</span>{music.radio.station?.id===station.id&&music.radio.phase==='playing'&&<span className="equalizer"><i/><i/><i/></span>}</button>)}</div>}</nav>
+      })}{index===1&&radioExpanded&&<div id="radio-sidebar-channels" className="radio-sidebar-channels" role="group" aria-label={t('选择电台频道')}>{radioStations.map(station=><button key={station.id} className={`radio-channel ${radioPage&&radioStation.id===station.id?'selected':''}`} aria-pressed={radioPage&&radioStation.id===station.id} disabled={music.transportBusy} onClick={()=>{navigate('radio');if(music.radio.station?.id!==station.id||!['playing','connecting','buffering','retrying'].includes(music.radio.phase))void music.playRadio(station);}}><RadioInstrumentIcon kind={station.id}/><span>{t(station.label)}</span>{music.radio.station?.id===station.id&&music.radio.phase==='playing'&&<span className="equalizer"><i/><i/><i/></span>}</button>)}</div>}</nav>
       </section>)}
       <div className="sidebar-bottom"><button aria-label={t("设置")} className={`nav-item ${page === 'settings' ? 'selected' : ''}`} onClick={() => navigate('settings')}><Settings2 size={18}/><span>{t("设置")}</span></button></div>
     </aside>
@@ -373,7 +389,7 @@ export default function App() {
         {music.connected && page === 'artists' && <aside className="browser-column" aria-label={t("艺术家列表")}><div className="column-list">{searchResults.artists.map(name => { return <button key={name} aria-pressed={searchResults.activeArtist === name} className={`artist-row ${searchResults.activeArtist === name ? 'selected' : ''}`} onClick={() => visit({artist:name,albumId:'',spine:undefined})}><span>{name}</span></button>; })}{searchResults.artists.length === 0 && <EmptyScore compact label={t("未找到艺术家")}/>}</div></aside>}
 
       <div className="main-scroll" ref={scrollRef}>
-        {radioPage&&<RadioHall state={music.radio} onPlay={music.playRadio} onStop={music.stopRadio} busy={music.transportBusy}/>}
+        {radioPage&&<RadioHall state={{...music.radio,station:music.radio.station??music.lastRadioStation}} onPlay={music.playRadio} onStop={music.stopRadio} busy={music.transportBusy}/>}
         {music.error && page!=='settings' && <div className="music-error" role="alert">{music.error}<button onClick={() => navigate('settings')}>{t("查看设置")}</button></div>}
         {!music.connected && page !== 'settings' && page !== 'radio' && <EmptyScore label={t("尚未连接音乐，可在设置中选择音乐库")}/>}
         {music.connected && page === 'playing' && !album && <EmptyScore label={t("暂无正在播放的歌曲")}/>}

@@ -182,3 +182,11 @@ await result.toggle(true);render();assert.equal(result.track.id,retainedTrack);a
 await result.selectLibrary('music');render();await result.playRadio(radio.radioStations[1]);render();assert.equal(result.radio.phase,'playing');assert.ok(calls.some(c=>c.command==='music_request'&&c.operation==='pause'));
 await result.selectLibrary('local');render();assert.equal(result.radio.station,null);assert.equal(radioCalls.at(-1).src,'');
 console.log('PASS: radio pauses local/Music, suppresses queue advancement, resumes live and releases audio on record/source switches');
+
+// Restored radio selection is only a preference, not an active stream.
+store.clear();store.set('bee-radio-volume','0.23');store.set('bee-radio-station',radio.radioStations[1].id);slots=[];
+const beforeRestoreCalls=calls.length;render();effects[1]();
+assert.equal(result.radioVolume,.23);assert.equal(result.lastRadioStation.id,radio.radioStations[1].id);assert.equal(result.radio.station,null);assert.equal(result.radio.phase,'idle');assert.equal(calls.length,beforeRestoreCalls);
+result.setRadioVolume(.41);render();effects[1]();assert.equal(store.get('bee-radio-volume'),'0.41');
+store.set('bee-radio-volume','broken');store.set('bee-radio-station','removed');slots=[];render();assert.equal(result.radioVolume,.7);assert.equal(result.lastRadioStation.id,radio.radioStations[0].id);
+console.log('PASS: radio station and volume restore without stream activation, volume persistence and invalid preference fallback');
