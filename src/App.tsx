@@ -1,10 +1,13 @@
 import { t, useLanguage, languages, setLanguage, type Language } from './i18n';
 import { flushSync } from 'react-dom';
 import { installUISounds, setUISoundsEnabled } from './uiSounds';
+import { RadioHall } from './RadioHall';
+import { ViolinIcon, RadioInstrumentIcon } from './ViolinIcon';
+import { radioStations } from './radio';
 import { EmptyScore } from './EmptyScore';
 import { Artwork } from './Artwork';
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
-import { Grid2X2, Columns3, Headphones, Users, ListMusic, PanelLeft, ArrowLeft, ArrowRight, Disc3, Monitor, Moon, Play, Pause, SkipBack, SkipForward, Settings2, Sun, Plus, MoreHorizontal, ListPlus } from 'lucide-react';
+import { ChevronRight, Grid2X2, Columns3, Headphones, Users, ListMusic, PanelLeft, ArrowLeft, ArrowRight, Disc3, Monitor, Moon, Play, Pause, SkipBack, SkipForward, Settings2, Sun, Plus, MoreHorizontal, ListPlus } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -37,7 +40,7 @@ import { useSidebarPeek } from './useSidebarPeek';
 import {createNavigationHistory} from './navigationHistory';
 import {suppressBrowserMenu} from './contextMenu';
 
-type Page = 'library' | 'artists' | 'playlists' | 'playing' | 'settings';
+type Page = 'library' | 'artists' | 'playlists' | 'playing' | 'radio' | 'settings';
 type Location = {page:Page;albumId:string;playlist:string;artist:string;query:string;view:'grid'|'spines';sort:string;scroll:number;spine?:number};
 const read = <T,>(key: string, fallback: T): T => { try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; } };
 const IconButton = ({ label, children, onClick, active = false, className = '' }: { label: string; children: React.ReactNode; onClick?: () => void; active?: boolean; className?: string }) => <button type="button" className={`icon-button ${active ? 'active' : ''} ${className}`} aria-label={label} title={label} onClick={onClick}>{children}</button>;
@@ -77,6 +80,7 @@ export default function App() {
   const [addingSongs,setAddingSongs]=useState(false);
   const draggedSong=useRef<string|null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [radioExpanded, setRadioExpanded] = useState(false);
   const sidebarPeek = useSidebarPeek(sidebarOpen);
   const [sidebarWidth, setSidebarWidth] = useState(() => clampSidebar(read<number>('bee-sidebar-width', 220)));
   const [view, setView] = useState<'grid' | 'spines'>(() => read('bee-view', 'grid'));
@@ -167,7 +171,7 @@ export default function App() {
   };
   const startAlbum = music.playAlbum;
   const togglePlayback = useRef(music.toggle);
-  togglePlayback.current = music.toggle;
+  togglePlayback.current = () => page === 'radio' && !music.radio.station ? music.playRadio(radioStations[0]) : music.toggle(page === 'playing');
   const navigate = useCallback((nextPage:Page)=>visit({page:nextPage,playlist:'',albumId:'',query:'',spine:undefined}),[visit]);
   const menuUpdater = useRef(updater);
   const menuUpdateRequested = useRef(false);
@@ -317,17 +321,20 @@ export default function App() {
     }
   };
   const playlistName = activeList?.name ?? t("播放列表");
-  const pageTitle = page === 'artists' ? searchResults.activeArtist || (search ? t("搜索结果") : t("艺术家")) : page === 'library' ? t("专辑") : page === 'playlists' ? playlistName : page === 'settings' ? t("设置") : track?.title || t("正在播放");
+  const radioPage = !selected && page === 'radio';
+  const radioStation = music.radio.station ?? radioStations[0];
+  const pageTitle = radioPage ? t(radioStation.label) : page === 'artists' ? searchResults.activeArtist || (search ? t("搜索结果") : t("艺术家")) : page === 'library' ? t("专辑") : page === 'playlists' ? playlistName : page === 'settings' ? t("设置") : track?.title || t("正在播放");
   const playbackArtist = page === 'playing' && !selected ? track?.artist?.trim() : '';
   const isCollection = ['library', 'artists', 'playlists'].includes(page);
   const navItems: { page: Page; label: string; icon: React.ReactNode }[] = [
     { page: 'playing', label: t("正在播放"), icon: <Headphones size={19}/> },
+    { page: 'radio', label: t('古典电台'), icon: <ViolinIcon size={19}/> },
     { page: 'artists', label: t("艺术家"), icon: <Users size={19}/> },
     { page: 'library', label: t("专辑"), icon: <Disc3 size={19}/> },
     { page: 'playlists', label: t("播放列表"), icon: <ListMusic size={19}/> },
   ];
 
-  return <div onContextMenu={suppressBrowserMenu} style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties} className={`app native-redesign ${visible ? '' : 'app-hidden'} ${sidebarOpen ? '' : 'sidebar-collapsed'} ${sidebarPeek.open ? 'sidebar-peeking' : ''} ${page === 'artists' ? 'three-column' : ''}`}>
+  return <div onContextMenu={suppressBrowserMenu} style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties} className={`app native-redesign ${radioPage ? 'classical-mode' : ''} ${visible ? '' : 'app-hidden'} ${sidebarOpen ? '' : 'sidebar-collapsed'} ${sidebarPeek.open ? 'sidebar-peeking' : ''} ${page === 'artists' ? 'three-column' : ''}`}>
     {playlistDialog&&<PlaylistDialog state={playlistDialog} lists={customLists} onSave={saveListDialog} onClose={()=>setPlaylistDialog(null)}/>}
     {addingSongs&&activeList?.managed&&<PlaylistSongs albums={albums} existing={playlistIds} onClose={()=>setAddingSongs(false)} onSave={ids=>music.editPlaylist({operation:'add',id:playlist,trackIds:ids})}/>}
     <UpdateIndicator updater={updater} open={updateOpen} setOpen={setUpdateOpen}/>
@@ -338,7 +345,10 @@ export default function App() {
       </div>
       {[t("资料库"), t("播放")].map((group, index) => <section className="sidebar-group" key={index} aria-labelledby={`nav-group-${index}`}>
       <div className="nav-label" id={`nav-group-${index}`}>{group}</div>
-      <nav aria-label={group}>{navItems.filter(item => (item.page === 'playing') === (index === 1)).map(item => <button key={item.page} aria-label={item.label} aria-current={page === item.page ? 'page' : undefined} className={`nav-item ${page === item.page ? 'selected' : ''}`} onClick={() => navigate(item.page)}>{item.icon}<span>{item.label}</span>{item.page === 'playing' && playing && <span className="equalizer"><i/><i/><i/></span>}</button>)}</nav>
+      <nav aria-label={group}>{navItems.filter(item => (['playing','radio'].includes(item.page)) === (index === 1)).map(item => {
+        const navButton = <button key={item.page} aria-label={item.label} aria-current={page === item.page ? 'page' : undefined} className={`nav-item ${page === item.page ? 'selected' : ''}`} onClick={() => {if(item.page==='radio')setRadioExpanded(true);navigate(item.page);}}>{item.icon}<span>{item.label}</span>{(item.page === 'radio' ? music.radio.phase==='playing' : item.page === 'playing' && !music.radio.station && playing) && <span className="equalizer"><i/><i/><i/></span>}</button>;
+        return item.page==='radio' ? <div key={item.page} className="radio-navigation-row">{navButton}<button className="radio-disclosure" aria-label={t('选择电台频道')} aria-expanded={radioExpanded} aria-controls="radio-sidebar-channels" onClick={()=>setRadioExpanded(value=>!value)}><ChevronRight size={13}/></button></div> : navButton;
+      })}{index===1&&radioExpanded&&<div id="radio-sidebar-channels" className="radio-sidebar-channels" role="group" aria-label={t('选择电台频道')}>{radioStations.map(station=><button key={station.id} className={`radio-channel ${radioPage&&music.radio.station?.id===station.id?'selected':''}`} aria-pressed={radioPage&&music.radio.station?.id===station.id} disabled={music.transportBusy} onClick={()=>{navigate('radio');if(music.radio.station?.id!==station.id||!['playing','connecting','buffering','retrying'].includes(music.radio.phase))void music.playRadio(station);}}><RadioInstrumentIcon kind={station.id}/><span>{t(station.label)}</span>{music.radio.station?.id===station.id&&music.radio.phase==='playing'&&<span className="equalizer"><i/><i/><i/></span>}</button>)}</div>}</nav>
       </section>)}
       <div className="sidebar-bottom"><button aria-label={t("设置")} className={`nav-item ${page === 'settings' ? 'selected' : ''}`} onClick={() => navigate('settings')}><Settings2 size={18}/><span>{t("设置")}</span></button></div>
     </aside>
@@ -346,7 +356,7 @@ export default function App() {
     {sidebarOpen && <SidebarDivider width={sidebarWidth} onChange={setSidebarWidth} onPreview={width => { if (isTauri()) queueContentBacking(theme === 'dark', width); }}/>}
     <main className="main">
       <header className="topbar" onMouseDown={dragWindow}>
-        <div className="toolbar-leading">{playbackArtist ? <div className="playback-heading">
+        <div className="toolbar-leading">{radioPage ? <span title="YourClassical / American Public Media">{pageTitle}</span> : playbackArtist ? <div className="playback-heading">
           <span className="playback-heading-title" title={pageTitle}>{pageTitle}</span>
           <span className="playback-heading-artist" title={playbackArtist}>{playbackArtist}</span>
         </div> : <span>{selected ? selected.title : pageTitle}</span>}</div>
@@ -360,8 +370,9 @@ export default function App() {
         {music.connected && page === 'artists' && <aside className="browser-column" aria-label={t("艺术家列表")}><div className="column-list">{searchResults.artists.map(name => { return <button key={name} aria-pressed={searchResults.activeArtist === name} className={`artist-row ${searchResults.activeArtist === name ? 'selected' : ''}`} onClick={() => visit({artist:name,albumId:'',spine:undefined})}><span>{name}</span></button>; })}{searchResults.artists.length === 0 && <EmptyScore compact label={t("未找到艺术家")}/>}</div></aside>}
 
       <div className="main-scroll" ref={scrollRef}>
+        {radioPage&&<RadioHall state={music.radio} onPlay={music.playRadio} onStop={music.stopRadio} onVolume={music.setRadioVolume} volume={music.radioVolume} busy={music.transportBusy}/>}
         {music.error && page!=='settings' && <div className="music-error" role="alert">{music.error}<button onClick={() => navigate('settings')}>{t("查看设置")}</button></div>}
-        {!music.connected && page !== 'settings' && <EmptyScore label={t("尚未连接音乐，可在设置中选择音乐库")}/>}
+        {!music.connected && page !== 'settings' && page !== 'radio' && <EmptyScore label={t("尚未连接音乐，可在设置中选择音乐库")}/>}
         {music.connected && page === 'playing' && !album && <EmptyScore label={t("暂无正在播放的歌曲")}/>}
 
         {music.connected && isCollection && page !== 'playlists' && !selected && <div className={`library-page ${view === 'spines' ? 'shelf-page' : ''}`}>
@@ -386,13 +397,13 @@ export default function App() {
               <Vinyl album={album} track={track} mounted playing={playing}/>
             </button>
             <button className="stage-sleeve" aria-label={t("查看当前专辑")} onClick={() => openAlbum(album)}><Artwork data-album-art={album.id} album={album} alt={t("{0} 封面", album.title)}/></button>
-            <Tonearm playing={playing} trackId={track.id} position={music.position} onToggle={music.toggle}/>
+            <Tonearm playing={playing} trackId={track.id} position={music.position} onToggle={()=>music.toggle(true)}/>
           </div>
           <div className="listening-footer">
           <Lyrics key={track.id} track={track} position={music.position} revision={preferencesRevision} refreshToken={lyricsRefresh}/>
           <div className="floating-transport" role="group" aria-label={t("播放控制")} aria-busy={music.transportBusy}>
             <button type="button" aria-label={t("上一首")} disabled={!music.canPrevious} title={music.canPrevious ? t("上一首") : t("没有上一首")} onClick={() => void music.skip('previous')}><SkipBack size={18} fill="currentColor"/></button>
-            <button type="button" className="transport-primary" aria-label={playing ? t("暂停") : t("播放")} title={playing ? t("暂停") : t("播放")} onClick={() => void music.toggle()}>{playing ? <Pause size={21} fill="currentColor"/> : <Play size={21} fill="currentColor"/>}</button>
+            <button type="button" className="transport-primary" aria-label={playing ? t("暂停") : t("播放")} title={playing ? t("暂停") : t("播放")} onClick={() => void music.toggle(true)}>{playing ? <Pause size={21} fill="currentColor"/> : <Play size={21} fill="currentColor"/>}</button>
             <button type="button" aria-label={t("下一首")} disabled={!music.canNext} title={music.canNext ? t("下一首") : t("没有下一首")} onClick={() => void music.skip('next')}><SkipForward size={18} fill="currentColor"/></button>
             <span className="transport-separator" aria-hidden="true"/>
             <button type="button" aria-label={t("待播放列表")} title={t("待播放列表")} aria-expanded={queueOpen} aria-controls="playback-queue" onClick={() => setQueueOpen(value => !value)}><ListMusic size={18}/></button>

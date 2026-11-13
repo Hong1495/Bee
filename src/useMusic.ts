@@ -1,4 +1,5 @@
 import { t } from './i18n';
+import { RadioSession, type RadioState, type RadioStation } from './radio';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { readPlayback,savePlayback,restorePlayback } from './playbackSession';
@@ -19,6 +20,11 @@ const request = <T,>(operation:string, id?:string) => invoke<T>('music_request',
 const local = <T,>(operation:string,id?:string) => invoke<T>('local_request',{operation,id:id??null});
 export type PlaylistEdit = {operation:'create'|'rename'|'delete'|'add'|'remove'|'move';id:string;name?:string;trackIds?:string[];beforeId?:string};
 export function useMusic() {
+ const [radioVolume,setRadioVolumeState]=useState(.7);
+ const [radio,setRadio]=useState<RadioState>({station:null,phase:'idle'});
+ const radioState=useRef<RadioState>({station:null,phase:'idle'});
+ const radioSession=useRef<RadioSession|null>(null);
+ if(!radioSession.current)radioSession.current=new RadioSession(state=>{radioState.current=state;setRadio(state);});
  const [customLists,setCustomLists]=useState<MusicPlaylist[]>([]);
  const [listsReady,setListsReady]=useState(false);
  const edits=useRef<Promise<unknown>>(Promise.resolve());
@@ -52,7 +58,7 @@ export function useMusic() {
   const song=restored.queue.tracks[restored.queue.index];awaitingResume.current=!!song;
   publish({running:false,playing:false,track:song??null},restored.seconds);
  },[replaceQueue,publish,persist]);
- useEffect(()=>{const save=()=>persist(true);window.addEventListener('bee-before-update',save);window.addEventListener('pagehide',save);document.addEventListener('visibilitychange',save);return()=>{save();window.removeEventListener('bee-before-update',save);window.removeEventListener('pagehide',save);document.removeEventListener('visibilitychange',save);};},[persist]);
+ useEffect(()=>{const save=()=>persist(true);window.addEventListener('bee-before-update',save);window.addEventListener('pagehide',save);document.addEventListener('visibilitychange',save);return()=>{save();radioSession.current?.dispose();window.removeEventListener('bee-before-update',save);window.removeEventListener('pagehide',save);document.removeEventListener('visibilitychange',save);};},[persist]);
  const tracks=useMemo(()=>source==='music'?library.tracks:localLibrary.tracks,[source,library,localLibrary]);
  const lookup=useMemo(()=>new Map(tracks.map(t=>[t.id,t])),[tracks]);
  useEffect(()=>{
@@ -74,6 +80,7 @@ export function useMusic() {
  const albums=useMemo(()=>groupAlbums(tracks),[tracks]);
  const start=useCallback(async(next:QueueState,seconds=0)=>{
   const song=next.tracks[next.index];if(!song)return;
+  radioSession.current?.clear();
   if(song.source==='local') {if(connectedRef.current)await request('pause');await invoke('local_request',{operation:'play',id:song.id,seconds});}
   else {await local('pause');await invoke('music_request',{operation:'play',id:song.id,trackIds:[song.id],sourceName:next.name});if(seconds>0)await invoke('music_seek',{seconds});}
   saved.current=null;awaitingResume.current=false;completed.current=false;replaceQueue(next);publish({running:true,playing:true,track:song},seconds);persist(true);
@@ -83,7 +90,7 @@ export function useMusic() {
   try{await operation();}catch(e){setError(String(e));}finally{lock.current=false;setTransportBusy(false);}
  },[]);
  const refreshStatus=useCallback(async()=>{
-  if(lock.current||polling.current||awaitingResume.current)return;polling.current=true;const token=epoch.current;
+  if(radioState.current.station||lock.current||polling.current||awaitingResume.current)return;polling.current=true;const token=epoch.current;
   try{
    const prev=current.current;const oldPos=position.current;
    let next:Snapshot;let seconds=0;let ended=false;
@@ -96,7 +103,7 @@ export function useMusic() {
     ended=data.running&&!data.track&&prev.playing&&oldPos.duration>0&&projected>=oldPos.duration-2;
     next={running:data.running,playing:data.playing,track:data.track??(queueRef.current.tracks.length?prev.track:null)};seconds=data.track?data.position:ended?oldPos.duration:oldPos.seconds;
    }
-   if(token!==epoch.current)return;
+   if(token!==epoch.current||radioState.current.station)return;
    const q=queueRef.current;
    if(ended&&q.tracks[q.index]?.id===prev.track?.id){
     if(q.index+1<q.tracks.length){publish({...prev,playing:false},oldPos.duration);await control(()=>start({...q,index:q.index+1}));return;}
@@ -124,6 +131,7 @@ export function useMusic() {
  const selectLibrary=useCallback(async(next:'music'|'local')=>{
   if(next===sourceRef.current||lock.current)return;
   await control(async()=>{
+   radioSession.current?.clear();
    saved.current=null;awaitingResume.current=false;
    if(current.current.track?.source==='local')await local('pause');else if(connectedRef.current)await request('pause');
    if(connectedRef.current){await request('disconnect');connectedRef.current=false;setMusicConnected(false);}
@@ -139,7 +147,22 @@ export function useMusic() {
  const playTrack=useCallback((record:Album,index:number,only=false)=>control(async()=>{const songs=record.tracks.flatMap(t=>lookup.get(t.id)?[lookup.get(t.id)!]:[]);await start({name:only?record.tracks[index].title:record.title,tracks:only?[songs[index]]:songs,index:only?0:index});}),[control,lookup,start]);
  const playAlbum=useCallback((record:Album)=>playTrack(record,0),[playTrack]);
  const playPlaylist=useCallback((id:string,songId?:string)=>control(async()=>{const ids=await loadPlaylist(id);const songs=ids.flatMap(key=>lookup.get(key)?[lookup.get(key)!]:[]);await start({name:playlists.find(p=>p.id===id)?.name??'',tracks:songs,index:songId?Math.max(0,songs.findIndex(s=>s.id===songId)):0});}),[control,loadPlaylist,lookup,playlists,start]);
- const toggle=useCallback(()=>control(async()=>{
+ const playRadio=useCallback((station:RadioStation)=>control(async()=>{
+  radioSession.current?.stop();
+  if(connectedRef.current)await request('pause');
+  if(isTauri())await local('pause');
+  // Cancel stale library restoration and freeze the retained record queue.
+  saved.current=null;awaitingResume.current=!!current.current.track;
+  const p=position.current;
+  const seconds=Math.min(p.duration||Infinity,p.seconds+(p.playing?(performance.now()-p.sampledAt)/1000:0));
+  publish({...current.current,playing:false},seconds);
+  radioSession.current?.start(station);
+ }),[control,publish]);
+ const stopRadio=useCallback(()=>{epoch.current++;radioSession.current?.stop();},[]);
+ const toggle=useCallback((recordOnly=false)=>control(async()=>{
+  const station=radioState.current.station;
+  if(station&&recordOnly){if(!current.current.track)return;await start(queueRef.current,position.current.seconds);return;}
+  if(station){if(['playing','connecting','buffering','retrying'].includes(radioState.current.phase))radioSession.current?.stop();else radioSession.current?.start(station);return;}
   const s=current.current;if(!s.track)return;
   if(awaitingResume.current){await start(queueRef.current,position.current.seconds);return;}
   if(completed.current){await start(queueRef.current);return;}
@@ -150,5 +173,5 @@ export function useMusic() {
  const jump=useCallback((index:number)=>control(()=>start({...queueRef.current,index})),[control,start]);
  const albumIndex=useMemo(()=>new Map(albums.map(a=>[a.id,a])),[albums]);
  const currentAlbum=useMemo(()=>snapshot.track?albumIndex.get(albumKey(snapshot.track))??groupAlbums([snapshot.track])[0]:undefined,[snapshot.track,albumIndex]);
- return {source,selectLibrary,editPlaylist,listsReady,queue,jump,transportBusy,canPrevious:queue.index>0,canNext:queue.index>=0&&queue.index+1<queue.tracks.length,position,albums,playlists,connected:source==='music'?musicConnected:localLibrary.folders.length>0,musicConnected,busy,error,setError,connect,disconnect,playAlbum,playTrack,playPlaylist,toggle,skip,loadPlaylist,currentAlbum,currentId:snapshot.track?albumKey(snapshot.track):'',track:snapshot.track,playing:snapshot.playing,running:snapshot.running,folders:localLibrary.folders,folderWarnings:localLibrary.warnings,folderBusy,updateFolders:folders};
+ return {radio,radioVolume,playRadio,stopRadio,setRadioVolume:(value:number)=>{setRadioVolumeState(value);radioSession.current?.setVolume(value);},source,selectLibrary,editPlaylist,listsReady,queue,jump,transportBusy,canPrevious:queue.index>0,canNext:queue.index>=0&&queue.index+1<queue.tracks.length,position,albums,playlists,connected:source==='music'?musicConnected:localLibrary.folders.length>0,musicConnected,busy,error,setError,connect,disconnect,playAlbum,playTrack,playPlaylist,toggle,skip,loadPlaylist,currentAlbum,currentId:snapshot.track?albumKey(snapshot.track):'',track:snapshot.track,playing:snapshot.playing,running:snapshot.running,folders:localLibrary.folders,folderWarnings:localLibrary.warnings,folderBusy,updateFolders:folders};
 }

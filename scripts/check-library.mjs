@@ -29,9 +29,10 @@ const invoke=async(command,args)=>{calls.push({command,...args});
  }
 if(command==='local_request'){if(['scan','add','remove'].includes(args.operation))return {tracks:localTracks,playlists:[],folders:[{id:'folder:1',name:'Folder',path:'/fixture'}],warnings:[]};if(args.operation==='status')return localStatus;return {};}
  if(args.operation==='library')return {tracks:musicTracks,playlists:[{id:'playlist',name:'List'}]};if(args.operation==='playlist')return musicTracks.map(t=>t.id).reverse();if(args.operation==='status')return musicStatus;return {};};
+const radio=load('src/radio.ts');
 const data=load('src/data.ts');
 const session=load('src/playbackSession.ts');
-hook=load('src/useMusic.ts',name=>name==='./i18n'?i18n:name==='react'?React:name.includes('/core')?{invoke,isTauri:()=>true}:name==='./data'?data:name==='./playbackSession'?session:{resetArtworkSession(){}}).useMusic;
+hook=load('src/useMusic.ts',name=>name==='./i18n'?i18n:name==='react'?React:name.includes('/core')?{invoke,isTauri:()=>true}:name==='./radio'?radio:name==='./data'?data:name==='./playbackSession'?session:{resetArtworkSession(){}}).useMusic;
 const render=()=>{cursor=0;effects=[];result=hook();};render();await result.connect();render();
 assert.equal(result.albums.length,1);assert.equal(result.albums[0].tracks.length,3);
 await result.playTrack(result.albums[0],1);render();assert.equal(result.queue.tracks.length,3);assert.equal(result.queue.index,1);assert.equal(result.canPrevious,true);assert.equal(result.canNext,true);
@@ -152,3 +153,32 @@ for(const source of ['local','music']){
  }
 }
 console.log('PASS: hidden local/Music playback persists without pausing, recurring polls advance both queues, explicit pause stays paused');
+
+// Radio suspends album queues and stops before returning to local playback.
+const radioCalls=[];
+class FakeAudio {
+ constructor(){this.volume=1;radioCalls.push(this);}
+ play(){this.onplaying?.();return Promise.resolve();}
+ pause(){this.paused=true;}
+ removeAttribute(){this.src='';}
+ load(){}
+}
+// Supply an injectable audio factory to the production session used by the hook.
+const NativeRadioSession=radio.RadioSession;
+radio.RadioSession=class extends NativeRadioSession {constructor(changed){super(changed,()=>new FakeAudio());}};
+store.set('bee-library-source','local');store.delete('bee-playback-session');slots=[];render();await result.updateFolders();render();
+await result.playAlbum(result.albums[0]);render();
+result.position.current.seconds=12;result.position.current.sampledAt=performance.now()-2000;
+await result.playRadio(radio.radioStations[0]);render();assert.equal(result.radio.phase,'playing');assert.equal(result.playing,false);
+assert.ok(result.position.current.seconds>=14&&result.position.current.seconds<16,'radio retains elapsed record position, not stale polling position');
+assert.ok(calls.some(c=>c.command==='local_request'&&c.operation==='pause'));
+const localCount=calls.filter(c=>c.operation==='play').length;
+localStatus={playing:false,ended:true,position:100};const radioPoll=effects.at(-1)();await new Promise(r=>setTimeout(r,10));radioPoll();render();
+assert.equal(calls.filter(c=>c.operation==='play').length,localCount);
+result.stopRadio();render();assert.equal(result.radio.phase,'stopped');assert.equal(radioCalls.at(-1).src,'');
+await result.toggle();render();assert.equal(result.radio.phase,'playing');
+const retainedTrack=result.track.id,retainedPosition=result.position.current.seconds;
+await result.toggle(true);render();assert.equal(result.track.id,retainedTrack);assert.equal(calls.filter(c=>c.operation==='play').at(-1).seconds,retainedPosition);assert.equal(result.radio.station,null);assert.equal(radioCalls.at(-1).paused,true);assert.equal(result.playing,true);
+await result.selectLibrary('music');render();await result.playRadio(radio.radioStations[1]);render();assert.equal(result.radio.phase,'playing');assert.ok(calls.some(c=>c.command==='music_request'&&c.operation==='pause'));
+await result.selectLibrary('local');render();assert.equal(result.radio.station,null);assert.equal(radioCalls.at(-1).src,'');
+console.log('PASS: radio pauses local/Music, suppresses queue advancement, resumes live and releases audio on record/source switches');
