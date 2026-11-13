@@ -1,5 +1,5 @@
 .classical-mode{--concert-ground:#c6ad7d;--concert-ink:#42321e;--concert-muted:#685337;--concert-edge:#8d6b3b55;--concert-panel:#ead7af;--concert-hover:#a7814330}
-[data-theme=dark] .classical-mode{--concert-ground:#393024;--concert-ink:#ecdbb9;--concert-muted:#c3ab82;--concert-edge:#d5af6a38;--concert-panel:#51412c;--concert-hover:#dbb67520}
+[data-theme=dark] .classical-mode{--concert-ground:#6b5b3f;--concert-ink:#ecdbb9;--concert-muted:#c3ab82;--concert-edge:#d5af6a38;--concert-panel:#51412c;--concert-hover:#dbb67520}
 .native-redesign.classical-mode .main{--bg:var(--concert-ground);--surface:var(--concert-panel);--text:var(--concert-ink);--muted:var(--concert-muted);--line:var(--concert-edge);--soft:var(--concert-hover);background:var(--concert-ground)}
 .native-redesign.classical-mode .topbar{background:var(--concert-ground);border-bottom:0;box-shadow:none}
 .native-redesign.classical-mode .topbar .icon-button{color:var(--concert-ink);border:1px solid var(--concert-edge);border-radius:7px;background:linear-gradient(145deg,#fff3d522,#90682e0d)}
@@ -10,7 +10,10 @@
 .golden-hall-art{display:block;width:100%;height:100%;position:absolute;inset:0;}
 .golden-hall-scene:after{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,var(--bg) 0%,color-mix(in srgb,var(--bg) 72%,transparent) 2%,color-mix(in srgb,var(--bg) 25%,transparent) 6%,transparent 13%,transparent 87%,color-mix(in srgb,var(--bg) 25%,transparent) 94%,color-mix(in srgb,var(--bg) 72%,transparent) 98%,var(--bg) 100%)}
 .hall-interior{filter:saturate(.96) brightness(.99)}
-[data-theme=dark] .hall-interior{filter:saturate(.85) brightness(.63)}
+.hall-theme-ground{fill:var(--concert-ground)}
+/* Map the SVG's ochre ground to the page bronze without washing out shadows. */
+[data-theme=dark] .hall-interior{filter:url(#hallNightTone);opacity:1}
+[data-theme=dark] .golden-hall-scene{mask-image:linear-gradient(to bottom,transparent,#000 22%,#000 76%,transparent);-webkit-mask-image:linear-gradient(to bottom,transparent,#000 22%,#000 76%,transparent)}
 .radio-listening-footer{display:flex;flex-direction:column;align-items:center;position:relative;padding:8px 20px 32px;flex:0 0 auto}
 .radio-listening-footer>.floating-transport{position:relative;bottom:auto;left:auto;transform:none;flex-shrink:0}.radio-transport input{width:72px;height:3px;accent-color:var(--muted);margin-right:7px}.radio-spinner{animation:radio-spin 1.2s linear infinite}
 .radio-sidebar-channels{display:flex;flex-direction:column;gap:2px;margin:3px 0 8px;padding-left:18px;min-width:0}
@@ -40,7 +43,7 @@
 
 /* Gold palette only; shared transport geometry and icons remain unchanged. */
 .classical-mode .radio-transport{--transport-gold-top:#f3dc98;--transport-gold-bottom:#dfb95e;--transport-gold-ink:#654512;--transport-gold-edge:#9b721b55;--transport-gold-hover:#ad7b2026}
-[data-theme=dark] .classical-mode .radio-transport{--transport-gold-top:#705623;--transport-gold-bottom:#4b3819;--transport-gold-ink:#f5d47e;--transport-gold-edge:#e9bd584d;--transport-gold-hover:#edbf5924}
+[data-theme=dark] .classical-mode .radio-transport{--transport-gold-top:#806637;--transport-gold-bottom:#68522e;--transport-gold-ink:#f5dca1;--transport-gold-edge:#e9bd584d;--transport-gold-hover:#edbf5924}
 .classical-mode .radio-transport.floating-transport{border:0;background:linear-gradient(160deg,var(--transport-gold-top),var(--transport-gold-bottom));box-shadow:0 8px 22px #4c341b20,inset 0 1px 0 #fff5d252;backdrop-filter:none;-webkit-backdrop-filter:none}
 .classical-mode .radio-transport button{color:var(--transport-gold-ink);transition:background .15s,transform .15s}
 .classical-mode .radio-transport .transport-primary{border:0;background:transparent;box-shadow:none}
@@ -72,3 +75,27 @@
 .sidebar .radio-disclosure:focus-visible{outline:2px solid var(--text);outline-offset:1px}
 
 .radio-status-announcement{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+
+.classical-mode .radio-transport.floating-transport{padding:0;overflow:hidden}
+.classical-mode .radio-transport .radio-play-action{display:flex;justify-content:center;align-items:center;gap:10px;width:172px;height:36px;border-radius:9px;font-size:12px;font-weight:500;letter-spacing:.02em}
+
+/* Five quiet staff lines; the single note is the actual volume position. */
+.playback-volume.score-volume{position:relative;width:98px;height:28px;display:block;color:var(--text);flex-shrink:0}
+.volume-staff{position:absolute;left:7px;right:35px;top:9px;background:repeating-linear-gradient(to bottom,currentColor 0,currentColor .6px,transparent .6px,transparent 2.5px);height:10.6px;opacity:.22;pointer-events:none}
+.volume-note-track{position:absolute;inset:0 35px 0 7px;pointer-events:none}
+.volume-note{position:absolute;top:6px;width:11px;height:16px;transform:translateX(-50%);filter:drop-shadow(0 1px 1px var(--bg))}
+.playback-volume.score-volume input{position:absolute;top:0;left:0;width:70px;height:28px;margin:0;opacity:0;cursor:ew-resize;appearance:none;-webkit-appearance:none}
+.score-volume input::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:14px;height:28px}
+.score-volume input::-moz-range-thumb{width:14px;height:28px;border:0}
+.volume-readout{position:absolute;right:0;top:0;line-height:28px;font-size:10px;font-variant-numeric:tabular-nums;opacity:.72;pointer-events:none}
+.volume-readout small{font-size:8px;margin-left:1px;opacity:.75}
+.score-volume:focus-within{outline:1px solid currentColor;outline-offset:3px;border-radius:5px}
+.score-volume.is-muted .volume-note{opacity:.45}
+.score-volume.is-disabled{opacity:.35}
+.score-volume.is-disabled input{cursor:default}
+.classical-mode .score-volume{color:var(--concert-ink)}
+.radio-heading{min-width:0}
+.native-redesign .radio-heading .playback-heading-artist{display:flex;align-items:center;gap:8px;min-width:0}
+.radio-heading .playback-heading-artist>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.radio-heading-station{flex-shrink:0;opacity:.7;font-size:10px}
+.radio-heading-station:not(:first-child)::before{content:"·";margin-right:8px}

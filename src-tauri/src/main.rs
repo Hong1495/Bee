@@ -3,6 +3,7 @@
 mod local;
 mod lyrics;
 mod music;
+mod radio;
 mod storage;
 mod restart;
 mod playlists;
@@ -243,6 +244,9 @@ fn main() {
             restart::restart_after_update,
             music::music_request,
             music::music_seek,
+            music::music_volume,
+            radio::radio_now_playing,
+            local::local_volume,
             local::local_request,
             storage::storage_request,
             playlists::playlist_request,

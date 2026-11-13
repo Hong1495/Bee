@@ -128,6 +128,13 @@ function FloatingScore() {
 export function GoldenHall({ active }: { active:boolean }) {
   return <svg className={`golden-hall-art ${active?'is-performing':''}`} viewBox="0 45 1200 670" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
     <defs>
+      <filter id="hallNightTone" x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
+        <feComponentTransfer>
+          <feFuncR type="linear" slope=".55"/>
+          <feFuncG type="linear" slope=".55"/>
+          <feFuncB type="linear" slope=".55"/>
+        </feComponentTransfer>
+      </filter>
       <linearGradient id="hallWall" x2="0" y2="1"><stop stopColor="#c8ad7c"/><stop offset=".5" stopColor="#e1c795"/><stop offset="1" stopColor="#ae8b58"/></linearGradient>
       <linearGradient id="gilding"><stop stopColor="#6f502c"/><stop offset=".23" stopColor="#c7a56a"/><stop offset=".48" stopColor="#f1db9f"/><stop offset=".72" stopColor="#b78e4f"/><stop offset="1" stopColor="#795a32"/></linearGradient>
       <linearGradient id="recess" x2="0" y2="1"><stop stopColor="#4a3c2c"/><stop offset="1" stopColor="#947750"/></linearGradient>
@@ -140,6 +147,7 @@ export function GoldenHall({ active }: { active:boolean }) {
       <radialGradient id="lampGlow"><stop stopColor="#fff3c9" stopOpacity=".35"/><stop offset="1" stopColor="#fff3c9" stopOpacity="0"/></radialGradient>
       <pattern id="ornament" width="30" height="22" patternUnits="userSpaceOnUse"><path d="M0 11q8-14 15 0t15 0M0 11q8 14 15 0t15 0" fill="none" stroke="#e3c78b" strokeWidth="1"/><path d="m15 5 4 6-4 6-4-6Z" fill="#c6a568"/></pattern>
     </defs>
+    <rect className="hall-theme-ground" x="0" y="45" width="1200" height="670"/>
     <g className="hall-interior">
     <rect width="1200" height="760" fill="#c3a573"/>
     {/* The actual hall is rectangular, with long balconies converging on the organ. */}

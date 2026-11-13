@@ -406,3 +406,15 @@ pub async fn music_seek(app:tauri::AppHandle,seconds:f64)->Result<(),String>{
   script("function run(argv) { const music=Application('com.apple.Music'); music.playerPosition=Number(argv[0]); }","JavaScript",&seconds.to_string())?;Ok(())
  }).await.map_err(|e|e.to_string())?
 }
+
+#[tauri::command]
+pub async fn music_volume(app:tauri::AppHandle,value:Option<f64>)->Result<f64,String>{
+ if value.is_some_and(|v| !v.is_finite() || !(0.0..=1.0).contains(&v)){return Err("无效的音量".into());}
+ tauri::async_runtime::spawn_blocking(move||{
+  use tauri::Manager;let state=app.state::<MusicBridge>();let _gate=state.serial.lock().map_err(|_|"音乐连接不可用")?;
+  if !state.connected.load(Ordering::SeqCst){return Err("请先连接 Apple Music".into());}
+  let arg=value.map(|v|(v*100.0).round().to_string()).unwrap_or_default();
+  let result=script("function run(argv) { const music=Application('com.apple.Music'); if(argv[0] !== '') music.soundVolume=Number(argv[0]); return String(music.soundVolume()/100); }","JavaScript",&arg)?;
+  result.trim().parse::<f64>().map_err(|e|e.to_string())
+ }).await.map_err(|e|e.to_string())?
+}

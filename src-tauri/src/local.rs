@@ -42,12 +42,14 @@ enum AudioCommand {
     Play(PathBuf, f64, mpsc::Sender<Result<(), String>>),
     Toggle(mpsc::Sender<Result<(), String>>),
     Pause,
+    Volume(Option<f32>, mpsc::Sender<f32>),
     Status(mpsc::Sender<Value>),
 }
 fn audio_worker(rx: mpsc::Receiver<AudioCommand>) {
     let stream = rodio::OutputStreamBuilder::open_default_stream();
     let mut sink: Option<rodio::Sink> = None;
     let mut position_offset=0.0;
+    let mut volume=1.0;
     while let Ok(cmd) = rx.recv() {
         match cmd {
             AudioCommand::Play(path, seconds, reply) => {
@@ -57,6 +59,7 @@ fn audio_worker(rx: mpsc::Receiver<AudioCommand>) {
                     let mut decoder = rodio::Decoder::try_from(file).map_err(|e| e.to_string())?;
                     if seconds > 0.0 { use rodio::Source; decoder.try_seek(Duration::from_secs_f64(seconds)).map_err(|e| e.to_string())?; }
                     let next = rodio::Sink::connect_new(output.mixer());
+                    next.set_volume(volume);
                     next.pause();
                     next.append(decoder);
                     if let Some(old) = sink.take() {
@@ -81,6 +84,10 @@ fn audio_worker(rx: mpsc::Receiver<AudioCommand>) {
                     Err("还没有播放的歌曲".into())
                 };
                 let _ = reply.send(result);
+            }
+            AudioCommand::Volume(value, reply) => {
+                if let Some(value)=value { volume=value; if let Some(s)=&sink { s.set_volume(volume); } }
+                let _=reply.send(volume);
             }
             AudioCommand::Pause => {
                 if let Some(s) = &sink {
@@ -379,4 +386,15 @@ mod tests {
         assert_eq!(std::fs::read(&audio).unwrap(), bytes);
         std::fs::remove_dir_all(root).unwrap();
     }
+}
+
+#[tauri::command]
+pub async fn local_volume(app:tauri::AppHandle,value:Option<f32>)->Result<f32,String>{
+    if value.is_some_and(|v| !v.is_finite() || !(0.0..=1.0).contains(&v)){return Err("无效的音量".into());}
+    tauri::async_runtime::spawn_blocking(move||{
+        use tauri::Manager;
+        let state=app.state::<LocalMedia>();let (tx,rx)=mpsc::channel();
+        sender(&state)?.send(AudioCommand::Volume(value,tx)).map_err(|e|e.to_string())?;
+        rx.recv_timeout(Duration::from_secs(3)).map_err(|e|e.to_string())
+    }).await.map_err(|e|e.to_string())?
 }

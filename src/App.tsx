@@ -1,6 +1,8 @@
 import { t, useLanguage, languages, setLanguage, type Language } from './i18n';
 import { flushSync } from 'react-dom';
 import { installUISounds, setUISoundsEnabled } from './uiSounds';
+import { useRadioMetadata } from './useRadioMetadata';
+import { PlaybackVolume } from './PlaybackVolume';
 import { RadioHall } from './RadioHall';
 import { ViolinIcon, RadioInstrumentIcon } from './ViolinIcon';
 import { radioStations } from './radio';
@@ -59,6 +61,7 @@ export default function App() {
   const [page, setPage] = useState<Page>('library');
   const [selected, setSelected] = useState<Album | null>(null);
   const music = useMusic();
+  const radioMetadata = useRadioMetadata(music.radio);
   const { albums, currentId, playing, track } = music;
   useEffect(()=>{setSelected(null);setQuery('');setPlaylistDialog(null);setAddingSongs(false);setPlaylist('');},[music.source]);
   const album = music.currentAlbum;
@@ -323,7 +326,7 @@ export default function App() {
   const playlistName = activeList?.name ?? t("播放列表");
   const radioPage = !selected && page === 'radio';
   const radioStation = music.radio.station ?? radioStations[0];
-  const pageTitle = radioPage ? t(radioStation.label) : page === 'artists' ? searchResults.activeArtist || (search ? t("搜索结果") : t("艺术家")) : page === 'library' ? t("专辑") : page === 'playlists' ? playlistName : page === 'settings' ? t("设置") : track?.title || t("正在播放");
+  const pageTitle = radioPage ? radioMetadata?.title || t(radioStation.label) : page === 'artists' ? searchResults.activeArtist || (search ? t("搜索结果") : t("艺术家")) : page === 'library' ? t("专辑") : page === 'playlists' ? playlistName : page === 'settings' ? t("设置") : track?.title || t("正在播放");
   const playbackArtist = page === 'playing' && !selected ? track?.artist?.trim() : '';
   const isCollection = ['library', 'artists', 'playlists'].includes(page);
   const navItems: { page: Page; label: string; icon: React.ReactNode }[] = [
@@ -356,11 +359,11 @@ export default function App() {
     {sidebarOpen && <SidebarDivider width={sidebarWidth} onChange={setSidebarWidth} onPreview={width => { if (isTauri()) queueContentBacking(theme === 'dark', width); }}/>}
     <main className="main">
       <header className="topbar" onMouseDown={dragWindow}>
-        <div className="toolbar-leading">{radioPage ? <span title="YourClassical / American Public Media">{pageTitle}</span> : playbackArtist ? <div className="playback-heading">
+        <div className="toolbar-leading">{radioPage ? <div className="playback-heading radio-heading"><span className="playback-heading-title" title={pageTitle}>{pageTitle}</span>{radioMetadata&&<span className="playback-heading-artist" title={[radioMetadata.credit,t(radioStation.label)].filter(Boolean).join(' · ')}>{radioMetadata.credit&&<span>{radioMetadata.credit}</span>}<span className="radio-heading-station" title="YourClassical · American Public Media">{t(radioStation.label)}</span></span>}</div> : playbackArtist ? <div className="playback-heading">
           <span className="playback-heading-title" title={pageTitle}>{pageTitle}</span>
           <span className="playback-heading-artist" title={playbackArtist}>{playbackArtist}</span>
         </div> : <span>{selected ? selected.title : pageTitle}</span>}</div>
-        <div className="top-actions">{music.connected&&music.listsReady&&page==='playlists'&&!selected&&<>
+        <div className="top-actions">{!selected&&(radioPage||page==='playing')&&<PlaybackVolume target={radioPage?'radio':music.source} radioVolume={music.radioVolume} onRadioVolume={music.setRadioVolume} onError={music.setError} disabled={!radioPage&&music.source==='music'&&!music.musicConnected}/>}{music.connected&&music.listsReady&&page==='playlists'&&!selected&&<>
           <IconButton label={t("新建播放列表")} onClick={()=>setPlaylistDialog({kind:'create'})}><Plus size={18}/></IconButton>
           {activeList?.managed&&<IconButton label={t("添加歌曲")} onClick={()=>setAddingSongs(true)}><ListPlus size={18}/></IconButton>}
           {activeList?.managed&&<button className="icon-button" title={t("播放列表操作")} aria-label={t("播放列表操作")} onClick={e=>{const r=e.currentTarget.getBoundingClientRect();void actionMenu(r.left,r.bottom+4,listActions(activeList));}}><MoreHorizontal size={18}/></button>}
@@ -370,7 +373,7 @@ export default function App() {
         {music.connected && page === 'artists' && <aside className="browser-column" aria-label={t("艺术家列表")}><div className="column-list">{searchResults.artists.map(name => { return <button key={name} aria-pressed={searchResults.activeArtist === name} className={`artist-row ${searchResults.activeArtist === name ? 'selected' : ''}`} onClick={() => visit({artist:name,albumId:'',spine:undefined})}><span>{name}</span></button>; })}{searchResults.artists.length === 0 && <EmptyScore compact label={t("未找到艺术家")}/>}</div></aside>}
 
       <div className="main-scroll" ref={scrollRef}>
-        {radioPage&&<RadioHall state={music.radio} onPlay={music.playRadio} onStop={music.stopRadio} onVolume={music.setRadioVolume} volume={music.radioVolume} busy={music.transportBusy}/>}
+        {radioPage&&<RadioHall state={music.radio} onPlay={music.playRadio} onStop={music.stopRadio} busy={music.transportBusy}/>}
         {music.error && page!=='settings' && <div className="music-error" role="alert">{music.error}<button onClick={() => navigate('settings')}>{t("查看设置")}</button></div>}
         {!music.connected && page !== 'settings' && page !== 'radio' && <EmptyScore label={t("尚未连接音乐，可在设置中选择音乐库")}/>}
         {music.connected && page === 'playing' && !album && <EmptyScore label={t("暂无正在播放的歌曲")}/>}

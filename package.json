@@ -1,14 +1,14 @@
 {
   "name": "bee-vinyl",
   "private": true,
-  "version": "0.1.21",
+  "version": "0.1.22",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "tauri": "tauri",
-    "check": "npm run build && node scripts/check-music.mjs && node scripts/check-artwork.mjs && node scripts/check-ui-sounds.mjs && node scripts/check-library.mjs && node scripts/check-performance.mjs && node scripts/check-updater.mjs && node scripts/check-update-schedule.mjs && node scripts/check-preferences.mjs && node scripts/check-playlist-covers.mjs && node scripts/check-navigation.mjs && node scripts/check-context-menu.mjs && node scripts/check-lyrics.mjs && node scripts/check-i18n.mjs && node scripts/check-radio.mjs",
+    "check": "npm run build && node scripts/check-music.mjs && node scripts/check-artwork.mjs && node scripts/check-ui-sounds.mjs && node scripts/check-library.mjs && node scripts/check-performance.mjs && node scripts/check-updater.mjs && node scripts/check-update-schedule.mjs && node scripts/check-preferences.mjs && node scripts/check-playlist-covers.mjs && node scripts/check-navigation.mjs && node scripts/check-context-menu.mjs && node scripts/check-lyrics.mjs && node scripts/check-i18n.mjs && node scripts/check-radio.mjs && node scripts/check-volume.mjs && node scripts/check-radio-metadata.mjs",
     "release:build": "node scripts/build-release.mjs"
   },
   "dependencies": {

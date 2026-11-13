@@ -215,5 +215,8 @@
   "直播电台 · 再次播放将回到直播": "Live radio · Resume returns to the live broadcast",
   "选择电台频道": "Choose a radio station",
   "免费直播，由 YourClassical / American Public Media 提供。": "Free live radio from YourClassical / American Public Media.",
-  "节目按电台编排播放，可能包含主持和赞助信息。": "Programming may include presenters and sponsor messages."
+  "节目按电台编排播放，可能包含主持和赞助信息。": "Programming may include presenters and sponsor messages.",
+  "音量": "Volume",
+  "静音": "Mute",
+  "取消静音": "Unmute"
 }
